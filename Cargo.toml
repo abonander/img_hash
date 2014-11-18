@@ -1,0 +1,10 @@
+[package]
+
+name = "img_hash"
+version = "0.0.1"
+authors = ["Austin Bonander <austin.bonander@gmail.com>"]
+
+[dependencies.image]
+
+git = "https://github.com/PistonDevelopers/rust-image.git"
+
