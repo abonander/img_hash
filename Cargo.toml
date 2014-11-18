@@ -6,5 +6,5 @@ authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
 [dependencies.image]
 
-git = "https://github.com/PistonDevelopers/rust-image.git"
+git = "https://github.com/PistonDevelopers/image.git"
 
