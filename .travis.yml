@@ -5,4 +5,4 @@ before_install:
 install:
   - sudo apt-get install -qq rust-nightly cargo
 script:
-  - cargo build
+  - cargo build --verbose
