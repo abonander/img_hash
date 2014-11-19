@@ -34,8 +34,10 @@ fn main() {
     let image1 = image::open(&Path::new("image1.png").unwrap()).unwrap();
     let image2 = image::open(&Path::new("image2.png").unwrap()).unwrap();
     
-    let hash1 = ImageHash::hash(&image1);
-    let hash2 = ImageHash::hash(&image2);
+    // Second value is `hash_size`. The total bits in the hash will be = `hash_size` * `hash_size`.
+    // Third value is `true` to use a fast hash, or `false` for a slower, more accurate DCT hash. DCT is recommended.
+    let hash1 = ImageHash::hash(&image1, 8, false);
+    let hash2 = ImageHash::hash(&image2, 8, false);
     
     println!("Image1 hash: {}", hash1.to_base64());
     println!("Image2 hash: {}", hash2.to_base64());
