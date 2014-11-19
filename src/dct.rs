@@ -62,7 +62,6 @@ fn from_columns(columns: Vec<Vec<f64>>, width: uint, height: uint) -> Vec<f64> {
 // http://unix4lyfe.org/dct/listing2.c
 // Source page:
 // http://unix4lyfe.org/dct/ (Accessed 8/10/2014)
-
 fn dct_1d(vec: &[f64]) -> Vec<f64> {
     let mut out = Vec::new();
 
