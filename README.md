@@ -9,7 +9,7 @@ http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html (Accessed Aug
 Thanks to Emil Mikulic for the 2D Discrete Cosine Transform implementation in C, ported to Rust in `src/dct.rs`:  
 http://unix4lyfe.org/dct/ (Implementation: http://unix4lyfe.org/dct/listing2.c) (Accessed August 2014)
 
-Unfortunately, the AAN algorithm that provides `O(n log n)` performance didn't seem to be viable for arbitrary-length input vectors without massive code duplicaton. This shouldn't be much of a concern as the program is largely I/O bound and the actual time spent hashing will be insignificant compared to the run time of the program as a whole.
+Unfortunately, the AAN algorithm that provides `O(n log n)` performance didn't seem to be viable for arbitrary-length input vectors without massive code duplicaton. This shouldn't be a problem as hashing an image is still very fast on modern hardware. Bottlenecks are more likely in I/O or decoding the images from files.
 
 Usage
 =====
