@@ -11,12 +11,36 @@ http://unix4lyfe.org/dct/ (Implementation: http://unix4lyfe.org/dct/listing2.c) 
 
 Unfortunately, the AAN algorithm that provides `O(n log n)` performance didn't seem to be viable for arbitrary-length input vectors without massive code duplicaton. This shouldn't be much of a concern as the program is largely I/O bound and the actual time spent hashing will be insignificant compared to the run time of the program as a whole.
 
-Importing
+Usage
 =====
+[Documentation on Rust-CI](http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/index.html)
+
 
 Add `img_hash` to your `Cargo.toml`:
 
     [dependencies.img_hash]
     git = "https://github.com/cybergeek94/img_hash"
     
-[Documentation on Rust-CI](http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/index.html)
+Example program:
+
+```rust
+extern crate image;
+extern crate img_hash;
+
+use self::image;
+use self::img_hash::ImageHash;
+
+fn main() {
+    let image1 = image::open(&Path::new("image1.png").unwrap()).unwrap();
+    let image2 = image::open(&Path::new("image2.png").unwrap()).unwrap();
+    
+    let hash1 = ImageHash::hash(&image1);
+    let hash2 = ImageHash::hash(&image2);
+    
+    println!("Image1 hash: {}", hash1.to_base64());
+    println!("Image2 hash: {}", hash2.to_base64());
+    
+    println!("% Difference: {}", hash1.dist_ratio(&hash2));
+}
+```
+    
