@@ -59,11 +59,11 @@ impl ImageHash {
     /// If `fast == true`, use a simple average of the pixels (faster, but less accurate). 
     /// Else, perform a Discrete Cosine Transform & Mean hash (slower, but more accurate).
     ///
-    /// Setting `fast == true` produces hashes that are really only useful for
+    /// Setting `fast = true` produces hashes that are really only useful for
     /// comparing *equality* and very *closely* similar images with minor edits or corrections. 
     /// Strong color/gamma correction will throw off the hash. 
     ///
-    /// In practice, on a fast computer, using `fast == slow` won't drastically increase the hash
+    /// In practice, on a fast computer, using `fast = false` won't drastically increase the hash
     /// time for a single image. In a program that processes many images at once, the bottleneck
     /// will likely be in loading and decoding the images, and not in the hash function.
     pub fn hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32, fast: bool) -> ImageHash {
