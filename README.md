@@ -19,3 +19,4 @@ Add `img_hash` to your `Cargo.toml`:
     [dependencies.img_hash]
     git = "https://github.com/cybergeek94/img_hash"
     
+[Documentation on Rust-CI](http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/index.html)
