@@ -4,7 +4,17 @@ name = "img_hash"
 version = "0.0.1"
 authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
-[dependencies.image]
+description = "A simple library that provides perceptual hashing and difference calculation for images."
 
-git = "git://github.com/PistonDevelopers/image.git"
+license = "MIT"
+
+documentation = "http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/"
+
+keywords = ["image", "hash", "perceptual", "difference"]
+
+repository = "http://github.com/cybergeek94/img_hash"
+
+[dependencies]
+
+image = "*"
 
