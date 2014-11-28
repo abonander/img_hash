@@ -4,8 +4,7 @@ extern crate serialize;
 use self::dct::{dct_2d, crop_dct};
 
 use self::image::{
-    GenericImage, DynamicImage, 
-    ImageBuf, Luma, Pixel, FilterType, Nearest, Rgba
+    GenericImage, ImageBuf, Luma, Pixel, FilterType, Nearest, Rgba
 };
 
 use self::image::imageops::{grayscale, resize};
@@ -137,7 +136,7 @@ fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
     cropped_dct.into_iter().map(|x| x >= mean).collect()
 }    
 
-
+#[cfg(test)]
 mod test {
     extern crate test;
 
@@ -147,7 +146,7 @@ mod test {
       
     use super::ImageHash;
 
-    use std::rand::{Rng, random};
+    use std::rand::random;
 
     
     fn rand_pixel() -> Rgba<u8> {  
