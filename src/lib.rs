@@ -4,7 +4,7 @@ extern crate serialize;
 use self::dct::{dct_2d, crop_dct};
 
 use self::image::{
-    GenericImage, ImageBuf, Luma, Pixel, FilterType, Nearest, Rgba
+    GenericImage, ImageBuffer, Luma, Pixel, FilterType, Nearest, Rgba
 };
 
 use self::image::imageops::{grayscale, resize};
@@ -92,7 +92,7 @@ impl ImageHash {
     }
 }
 
-fn square_resize_and_gray<Img: GenericImage<Rgba<u8>>>(img: &Img, size: u32) -> ImageBuf<Luma<u8>> {
+fn square_resize_and_gray<Img: GenericImage<Rgba<u8>>>(img: &Img, size: u32) -> ImageBuffer<Vec<u8>, Luma<u8>> {
         let small = resize(img, size, size, FILTER_TYPE);
         grayscale(&small)
 }
@@ -154,8 +154,8 @@ mod test {
         Pixel::from_channels(a, b, c, d)
     }
 
-    fn gen_test_img(width: u32, height: u32) -> ImageBuf<Rgba<u8>> {
-        let mut buf: ImageBuf<Rgba<u8>> = ImageBuf::new(width, height);
+    fn gen_test_img(width: u32, height: u32) -> ImageBuffer<Vec<u8>, Rgba<u8>> {
+        let mut buf: ImageBuffer<Rgba<u8>> = ImageBuffer::from_raw(width, height, Vec::new());
         
         for px in buf.pixelbuf_mut().iter_mut() {
             *px = rand_pixel();    
