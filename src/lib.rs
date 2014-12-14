@@ -17,6 +17,8 @@ const FILTER_TYPE: FilterType = Nearest;
 
 mod dct;
 
+type LumaBuf = ImageBuffer<Vec<u8>, u8, Luma<u8>>;
+
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
@@ -92,7 +94,7 @@ impl ImageHash {
     }
 }
 
-fn square_resize_and_gray<Img: GenericImage<Rgba<u8>>>(img: &Img, size: u32) -> ImageBuffer<Vec<u8>, Luma<u8>> {
+fn square_resize_and_gray<Img: GenericImage<Rgba<u8>>>(img: &Img, size: u32) -> LumaBuf {
         let small = resize(img, size, size, FILTER_TYPE);
         grayscale(&small)
 }
@@ -100,8 +102,7 @@ fn square_resize_and_gray<Img: GenericImage<Rgba<u8>>>(img: &Img, size: u32) -> 
 fn fast_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
     let temp = square_resize_and_gray(img, hash_size);
 
-    let hash_values: Vec<u8> = temp.pixels().map(|(_, _, x)| x.channel())
-        .collect();
+    let hash_values: Vec<u8> = temp.pixels().map(|px| px.channels()[0]).collect();
 
     let hash_sq = (hash_size * hash_size) as uint;
 
@@ -119,8 +120,7 @@ fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
     let temp = square_resize_and_gray(img, large_size);
 
     // Our hash values are converted to doubles for the DCT
-    let hash_values: Vec<f64> = temp.pixels()
-        .map(|(_, _, x)| x.channel() as f64).collect();
+    let hash_values: Vec<f64> = temp.pixels().map(|px| px.channels()[0] as f64).collect();
 
     let dct = dct_2d(hash_values.as_slice(),
         large_size as uint, large_size as uint);
@@ -140,28 +140,23 @@ fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
 mod test {
     extern crate test;
 
-    use image::{Rgba, Pixel, ImageBuf};
+    use image::{Rgba, ImageBuffer};
 
     use self::test::Bencher;
       
     use super::ImageHash;
 
-    use std::rand::random;
-
+    use std::rand::{weak_rng, Rng};
     
-    fn rand_pixel() -> Rgba<u8> {  
-        let (a, b, c, d) = random();
-        Pixel::from_channels(a, b, c, d)
-    }
+    type RgbaBuf = ImageBuffer<Vec<u8>, u8, Rgba<u8>>;
 
-    fn gen_test_img(width: u32, height: u32) -> ImageBuffer<Vec<u8>, Rgba<u8>> {
-        let mut buf: ImageBuffer<Rgba<u8>> = ImageBuffer::from_raw(width, height, Vec::new());
-        
-        for px in buf.pixelbuf_mut().iter_mut() {
-            *px = rand_pixel();    
-        }
+    fn gen_test_img(width: u32, height: u32) -> RgbaBuf {
+        let len = (width * height * 4) as uint;
+        let mut buf = Vec::with_capacity(len);
+        unsafe { buf.set_len(len); } // We immediately fill the buffer.
+        weak_rng().fill_bytes(&mut *buf);
 
-        buf
+        ImageBuffer::from_raw(width, height, buf).unwrap()
     }
 
     #[test]
