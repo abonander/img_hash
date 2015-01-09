@@ -25,8 +25,8 @@ type LumaBuf = ImageBuffer<Vec<u8>, u8, Luma<u8>>;
 /// Get an instance with `ImageHash::hash()`.
 #[derive(PartialEq, Eq, Hash, Show, Clone)]
 pub struct ImageHash {
-    size: u32,
-    bitv: Bitv,
+    pub size: u32,
+    pub bitv: Bitv,
 }
 
 impl ImageHash {
