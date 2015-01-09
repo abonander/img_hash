@@ -1,5 +1,5 @@
 use std::f64::consts::{PI, SQRT2};
-use std::num::FloatMath;
+use std::num::Float;
 
 pub fn dct_2d(packed_2d: &[f64], width: uint, height: uint) -> Vec<f64> {
     assert!(packed_2d.len() == width * height, 

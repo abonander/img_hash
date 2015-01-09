@@ -23,7 +23,7 @@ type LumaBuf = ImageBuffer<Vec<u8>, u8, Luma<u8>>;
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
 /// Get an instance with `ImageHash::hash()`.
-#[deriving(PartialEq, Eq, Hash, Show, Clone)]
+#[derive(PartialEq, Eq, Hash, Show, Clone)]
 pub struct ImageHash {
     size: u32,
     bitv: Bitv,
