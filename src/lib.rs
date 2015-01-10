@@ -34,7 +34,7 @@ impl ImageHash {
     /// Equivalent to counting the 1-bits of the XOR of the two `Bitv`.
     /// 
     /// Essential to determining the perceived difference between `self` and `other`.
-    pub fn dist(&self, other: &ImageHash) -> uint {
+    pub fn dist(&self, other: &ImageHash) -> usize {
         assert!(self.bitv.len() == other.bitv.len(), 
                 "ImageHashes must be the same length for proper comparison!");
 
@@ -75,7 +75,7 @@ impl ImageHash {
             dct_hash(img, hash_size)
         };
 
-        assert!((hash_size * hash_size) as uint == hash.len());
+        assert!((hash_size * hash_size) as usize == hash.len());
 
         ImageHash {
             bitv: hash,
@@ -113,12 +113,12 @@ fn fast_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
 
     let hash_values: Vec<u8> = temp.pixels().map(|px| px.channels()[0]).collect();
 
-    let hash_sq = (hash_size * hash_size) as uint;
+    let hash_sq = (hash_size * hash_size) as usize;
 
-    let mean = hash_values.iter().fold(0u, |b, &a| a as uint + b) 
+    let mean = hash_values.iter().fold(0us, |b, &a| a as usize + b) 
         / hash_sq;
 
-    hash_values.into_iter().map(|x| x as uint >= mean).collect()
+    hash_values.into_iter().map(|x| x as usize >= mean).collect()
 }
 
 fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
@@ -132,10 +132,10 @@ fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
     let hash_values: Vec<f64> = temp.pixels().map(|px| px.channels()[0] as f64).collect();
 
     let dct = dct_2d(hash_values.as_slice(),
-        large_size as uint, large_size as uint);
+        large_size as usize, large_size as usize);
 
-    let original = (large_size as uint, large_size as uint);
-    let new = (hash_size as uint, hash_size as uint);
+    let original = (large_size as usize, large_size as usize);
+    let new = (hash_size as usize, hash_size as usize);
 
     let cropped_dct = crop_dct(dct, original, new);
 
@@ -160,7 +160,7 @@ mod test {
     type RgbaBuf = ImageBuffer<Vec<u8>, u8, Rgba<u8>>;
 
     fn gen_test_img(width: u32, height: u32) -> RgbaBuf {
-        let len = (width * height * 4) as uint;
+        let len = (width * height * 4) as usize;
         let mut buf = Vec::with_capacity(len);
         unsafe { buf.set_len(len); } // We immediately fill the buffer.
         weak_rng().fill_bytes(&mut *buf);

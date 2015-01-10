@@ -1,7 +1,7 @@
 use std::f64::consts::{PI, SQRT2};
 use std::num::Float;
 
-pub fn dct_2d(packed_2d: &[f64], width: uint, height: uint) -> Vec<f64> {
+pub fn dct_2d(packed_2d: &[f64], width: usize, height: usize) -> Vec<f64> {
     assert!(packed_2d.len() == width * height, 
             "Slice length must be width * height!");
 
@@ -18,7 +18,7 @@ pub fn dct_2d(packed_2d: &[f64], width: uint, height: uint) -> Vec<f64> {
     from_columns(dct_columns, width, height)
 }
 
-fn rows(packed_2d: Vec<f64>, width: uint, height: uint) -> Vec<Vec<f64>> {
+fn rows(packed_2d: Vec<f64>, width: usize, height: usize) -> Vec<Vec<f64>> {
     let mut rows: Vec<Vec<f64>> = Vec::new();
 
     for y in range(0, height) {
@@ -30,7 +30,7 @@ fn rows(packed_2d: Vec<f64>, width: uint, height: uint) -> Vec<Vec<f64>> {
     rows
 }
 
-fn columns(rows: Vec<Vec<f64>>, width: uint, height: uint) -> Vec<Vec<f64>> {
+fn columns(rows: Vec<Vec<f64>>, width: usize, height: usize) -> Vec<Vec<f64>> {
     let mut columns: Vec<Vec<f64>> = Vec::new();
 
     for x in range(0, width) {
@@ -46,7 +46,7 @@ fn columns(rows: Vec<Vec<f64>>, width: uint, height: uint) -> Vec<Vec<f64>> {
     columns
 }
 
-fn from_columns(columns: Vec<Vec<f64>>, width: uint, height: uint) -> Vec<f64> {
+fn from_columns(columns: Vec<Vec<f64>>, width: usize, height: usize) -> Vec<f64> {
     let mut packed = Vec::new();
 
     for y in range(0, height) {
@@ -84,7 +84,7 @@ fn dct_1d(vec: &[f64]) -> Vec<f64> {
     out
 }
 
-pub fn crop_dct(dct: Vec<f64>, original: (uint, uint), new: (uint, uint)) 
+pub fn crop_dct(dct: Vec<f64>, original: (usize, usize), new: (usize, usize)) 
     -> Vec<f64> {
     let mut out = Vec::new();
 
