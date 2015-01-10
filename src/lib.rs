@@ -82,9 +82,7 @@ impl ImageHash {
         }
     }
 
-    /// Creates a Hash from Base64 string representing the bits of a hash.
-    ///
-    /// This is the counterpart of to_base64().
+    /// Create an `ImageHash` instance from the given Base64-encoded string.
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
         let data = try!(encoded_hash.from_base64());
 
