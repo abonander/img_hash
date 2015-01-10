@@ -9,7 +9,7 @@ use self::image::{
 
 use self::image::imageops::{grayscale, resize};
 
-use self::serialize::base64::{ToBase64, STANDARD};
+use self::serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
 
 use std::collections::Bitv;
 
@@ -25,7 +25,6 @@ type LumaBuf = ImageBuffer<Vec<u8>, u8, Luma<u8>>;
 /// Get an instance with `ImageHash::hash()`.
 #[derive(PartialEq, Eq, Hash, Show, Clone)]
 pub struct ImageHash {
-    size: u32,
     bitv: Bitv,
 }
 
@@ -51,12 +50,12 @@ impl ImageHash {
     ///
     /// See `ImageHash::dist()`.
     pub fn dist_ratio(&self, other: &ImageHash) -> f32 {
-        self.dist(other) as f32 / self.size as f32
+        self.dist(other) as f32 / self.size() as f32
     }
-   
-    /// Get the hash size of this image. Should be equal to the number of bits in the hash. 
-    pub fn hash_size(&self) -> u32 { self.size }
     
+    /// Get the hash size of this image. Should be equal to the number of bits in the hash.
+    pub fn size(&self) -> u32 { self.bitv.len() as u32}
+
     /// Create a hash of `img` with a length of `hash_size * hash_size`.
     ///
     /// If `fast == true`, use a simple average of the pixels (faster, but less accurate). 
@@ -70,18 +69,28 @@ impl ImageHash {
     /// time for a single image. In a program that processes many images at once, the bottleneck
     /// will likely be in loading and decoding the images, and not in the hash function.
     pub fn hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32, fast: bool) -> ImageHash {
-        let hash = if fast { 
-            fast_hash(img, hash_size)   
-        } else { 
-            dct_hash(img, hash_size)             
+        let hash = if fast {
+            fast_hash(img, hash_size)
+        } else {
+            dct_hash(img, hash_size)
         };
 
         assert!((hash_size * hash_size) as uint == hash.len());
 
         ImageHash {
-            size: hash_size * hash_size,
             bitv: hash,
         }
+    }
+
+    /// Creates a Hash from Base64 string representing the bits of a hash.
+    ///
+    /// This is the counterpart of to_base64().
+    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
+        let data = try!(encoded_hash.from_base64());
+
+        Ok(ImageHash{
+            bitv: Bitv::from_bytes(data.as_slice())
+        })
     }
 
     /// Get a Base64 string representing the bits of this hash.
@@ -165,7 +174,28 @@ mod test {
         let hash1 = ImageHash::hash(&test_img, 32, false);
         let hash2 = ImageHash::hash(&test_img, 32, false);
 
-        assert_eq!(hash1, hash2);            
+        assert_eq!(hash1, hash2);
+    }
+
+
+    #[test]
+    fn size() {
+        let test_img = gen_test_img(1024, 1024);
+        let hash = ImageHash::hash(&test_img, 32, false);
+        assert_eq!(32*32, hash.size());
+    }
+
+    #[test]
+    fn base64_encoding_decoding() {
+        let test_img = gen_test_img(1024, 1024);
+        let hash1 = ImageHash::hash(&test_img, 32, false);
+
+        let base64_string = hash1.to_base64();
+        let decoded_result = ImageHash::from_base64(base64_string.as_slice());
+
+        assert!(decoded_result.is_ok());
+
+        assert_eq!(decoded_result.unwrap(), hash1);
     }
 
     #[bench]
