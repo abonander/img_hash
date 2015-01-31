@@ -1,29 +1,36 @@
+#![feature(collections, core, hash)]
+// Silence feature warnings for test module.
+#![cfg_attr(test, feature(rand, test))]
+
 extern crate image;
-extern crate serialize;
+extern crate "rustc-serialize" as serialize;
 
 use self::dct::{dct_2d, crop_dct};
 
-use self::image::{
-    GenericImage, ImageBuffer, Luma, Pixel, FilterType, Nearest, Rgba
+use image::{
+    imageops,
+    DynamicImage,
+    FilterType,
+    GrayImage,
+    GrayAlphaImage,
+    Pixel,
+    RgbImage,
+    RgbaImage,
 };
 
-use self::image::imageops::{grayscale, resize};
-
-use self::serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
+use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
 
 use std::collections::Bitv;
 
-const FILTER_TYPE: FilterType = Nearest;
+const FILTER_TYPE: FilterType = FilterType::Nearest;
 
 mod dct;
-
-type LumaBuf = ImageBuffer<Vec<u8>, u8, Luma<u8>>;
 
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
 /// Get an instance with `ImageHash::hash()`.
-#[derive(PartialEq, Eq, Hash, Show, Clone)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct ImageHash {
     bitv: Bitv,
 }
@@ -68,7 +75,7 @@ impl ImageHash {
     /// In practice, on a fast computer, using `fast = false` won't drastically increase the hash
     /// time for a single image. In a program that processes many images at once, the bottleneck
     /// will likely be in loading and decoding the images, and not in the hash function.
-    pub fn hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32, fast: bool) -> ImageHash {
+    pub fn hash<I: HashImage>(img: &I, hash_size: u32, fast: bool) -> ImageHash {
         let hash = if fast {
             fast_hash(img, hash_size)
         } else {
@@ -87,7 +94,7 @@ impl ImageHash {
         let data = try!(encoded_hash.from_base64());
 
         Ok(ImageHash{
-            bitv: Bitv::from_bytes(data.as_slice())
+            bitv: Bitv::from_bytes(&*data)
         })
     }
 
@@ -95,39 +102,28 @@ impl ImageHash {
     ///
     /// Mostly for printing convenience.
     pub fn to_base64(&self) -> String {
-        let self_bytes = self.bitv.to_bytes();
-
-        self_bytes.as_slice().to_base64(STANDARD)
+        self.bitv.to_bytes().to_base64(STANDARD)
     }
 }
 
-fn square_resize_and_gray<Img: GenericImage<Rgba<u8>>>(img: &Img, size: u32) -> LumaBuf {
-        let small = resize(img, size, size, FILTER_TYPE);
-        grayscale(&small)
+
+fn fast_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+    let hash_values = img.square_resize_and_gray(hash_size).into_raw();
+
+    let hash_sq = hash_size * hash_size;
+
+    let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) / hash_sq;
+
+    hash_values.into_iter().map(|x| x as u32 >= mean).collect()
 }
 
-fn fast_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
-    let temp = square_resize_and_gray(img, hash_size);
-
-    let hash_values: Vec<u8> = temp.pixels().map(|px| px.channels()[0]).collect();
-
-    let hash_sq = (hash_size * hash_size) as usize;
-
-    let mean = hash_values.iter().fold(0us, |b, &a| a as usize + b) 
-        / hash_sq;
-
-    hash_values.into_iter().map(|x| x as usize >= mean).collect()
-}
-
-fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
+fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
     let large_size = hash_size * 4;
 
     // We take a bigger resize than fast_hash, 
     // then we only take the lowest corner of the DCT
-    let temp = square_resize_and_gray(img, large_size);
-
-    // Our hash values are converted to doubles for the DCT
-    let hash_values: Vec<f64> = temp.pixels().map(|px| px.channels()[0] as f64).collect();
+    let hash_values: Vec<_> = img.square_resize_and_gray(large_size)
+        .into_raw().into_iter().map(|val| val as f64).collect();
 
     let dct = dct_2d(hash_values.as_slice(),
         large_size as usize, large_size as usize);
@@ -141,7 +137,28 @@ fn dct_hash<Img: GenericImage<Rgba<u8>>>(img: &Img, hash_size: u32) -> Bitv {
         / (hash_size * hash_size) as f64;
 
     cropped_dct.into_iter().map(|x| x >= mean).collect()
-}    
+}
+
+/// A trait for describing an image that can be successfully hashed.
+pub trait HashImage {
+    /// Resize the image to `size` width by `size` height (making it square)
+    /// and then apply a grayscale filter and drop the alpha channel (if present).
+    fn square_resize_and_gray(&self, size: u32) -> GrayImage;    
+}
+
+macro_rules! hash_img_impl {
+    ($ty:ty) => (
+        impl HashImage for $ty {
+            fn square_resize_and_gray(&self, size: u32) -> GrayImage {
+                let ref small = imageops::resize(self, size, size, FILTER_TYPE);
+                imageops::grayscale(small)
+            }
+        }
+    );
+    ($($ty:ty),+) => ( $(hash_img_impl! { $ty })+ );
+}
+
+hash_img_impl! { GrayImage, GrayAlphaImage, RgbImage, RgbaImage, DynamicImage }
 
 #[cfg(test)]
 mod test {
@@ -155,7 +172,7 @@ mod test {
 
     use std::rand::{weak_rng, Rng};
     
-    type RgbaBuf = ImageBuffer<Vec<u8>, u8, Rgba<u8>>;
+    type RgbaBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
     fn gen_test_img(width: u32, height: u32) -> RgbaBuf {
         let len = (width * height * 4) as usize;
@@ -189,7 +206,7 @@ mod test {
         let hash1 = ImageHash::hash(&test_img, 32, false);
 
         let base64_string = hash1.to_base64();
-        let decoded_result = ImageHash::from_base64(base64_string.as_slice());
+        let decoded_result = ImageHash::from_base64(&*base64_string);
 
         assert!(decoded_result.is_ok());
 
