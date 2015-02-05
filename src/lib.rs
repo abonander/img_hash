@@ -108,7 +108,7 @@ impl ImageHash {
 
 
 fn fast_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
-    let hash_values = img.square_resize_and_gray(hash_size).into_raw();
+    let hash_values = img.gray_resize_square(hash_size).into_raw();
 
     let hash_sq = hash_size * hash_size;
 
@@ -122,7 +122,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
 
     // We take a bigger resize than fast_hash, 
     // then we only take the lowest corner of the DCT
-    let hash_values: Vec<_> = img.square_resize_and_gray(large_size)
+    let hash_values: Vec<_> = img.gray_resize_square(large_size)
         .into_raw().into_iter().map(|val| val as f64).collect();
 
     let dct = dct_2d(hash_values.as_slice(),
@@ -141,17 +141,19 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
 
 /// A trait for describing an image that can be successfully hashed.
 pub trait HashImage {
-    /// Resize the image to `size` width by `size` height (making it square)
-    /// and then apply a grayscale filter and drop the alpha channel (if present).
-    fn square_resize_and_gray(&self, size: u32) -> GrayImage;    
+    /// Apply a grayscale filter and drop the alpha channel (if present),
+    /// then resize the image to `size` width by `size` height (making it square).
+    ///
+    /// Returns a copy, leaving `self` unmodified.
+    fn gray_resize_square(&self, size: u32) -> GrayImage;    
 }
 
 macro_rules! hash_img_impl {
     ($ty:ty) => (
         impl HashImage for $ty {
-            fn square_resize_and_gray(&self, size: u32) -> GrayImage {
-                let ref small = imageops::resize(self, size, size, FILTER_TYPE);
-                imageops::grayscale(small)
+            fn gray_resize_square(&self, size: u32) -> GrayImage {
+                let ref gray = imageops::grayscale(self);
+                imageops::resize(gray, size, size, FILTER_TYPE)
             }
         }
     );
