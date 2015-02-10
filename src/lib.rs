@@ -73,12 +73,11 @@ impl ImageHash {
     /// Get the `HashType` that this `ImageHash` was created with.
     pub fn hash_type(&self) -> HashType { self.hash_type }
 
-    /// Create a hash of `img` with a length of `hash_size * hash_size` using the hash algorithm
-    /// described by `hash_type`.
+    /// Create a hash of `img` with a length of `hash_size * hash_size`
+    /// (`* 2` that when using `HashType::DoubleGradient`) 
+    /// using the hash algorithm described by `hash_type`.
     pub fn hash<I: HashImage>(img: &I, hash_size: u32, hash_type: HashType) -> ImageHash {
         let hash = hash_type.hash(img, hash_size);
-
-        assert!((hash_size * hash_size) as usize == hash.len());
 
         ImageHash {
             bitv: hash,
@@ -88,7 +87,7 @@ impl ImageHash {
 
     /// Create an `ImageHash` instance from the given Base64-encoded string.
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
-        let data = try!(encoded_hash.from_base64());
+        let mut data = try!(encoded_hash.from_base64());
         // The hash type should be the first bit of the hash
         let hash_type = HashType::from_byte(data.remove(0));
 
@@ -113,9 +112,25 @@ impl ImageHash {
 /// An enum describing the hash algorithms that `img_hash` offers.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum HashType { 
+    /// This algorithm first averages the pixels of the reduced-size and color image,
+    /// and then compares each pixel to the average.
+    ///
     /// Fastest, but inaccurate. Really only useful for finding duplicates.
     Mean,
-    /// Slowest, but detects changes in color gamut and sometimes significant edits.
+    /// This algorithm compares each pixel in a row to its neighbor and registers changes in
+    /// gradients (e.g. edges and color boundaries).
+    ///
+    /// More accurate than `Mean` but much faster than `DCT`.
+    Gradient,
+    /// A version of `Gradient` that adds an extra hash pass orthogonal to the first 
+    /// (i.e. on columns in addition to rows).
+    /// 
+    /// Slower than `Gradient` and produces a double-sized hash, but much more accurate.
+    DoubleGradient,
+    /// This algorithm runs a Discrete Cosine Transform on the reduced-color and size image,
+    /// then compares each datapoint in the transform to the average.
+    ///
+    /// Slowest by far, but can detect changes in color gamut and sometimes relatively significant edits.
     DCT,
 }
 
@@ -126,6 +141,8 @@ impl HashType {
         match self {
             Mean => mean_hash(img, hash_size),
             DCT => dct_hash(img, hash_size),
+            Gradient => gradient_hash(img, hash_size),
+            DoubleGradient => double_gradient_hash(img, hash_size),
         }
     }
 
@@ -135,6 +152,8 @@ impl HashType {
         match self {
             Mean => 1,
             DCT => 2,
+            Gradient => 3,
+            DoubleGradient => 4,
         }
     }
 
@@ -144,6 +163,8 @@ impl HashType {
         match byte {
             1 => Mean,
             2 => DCT,
+            3 => Gradient,
+            4 => DoubleGradient,
             _ => panic!("Byte {:?} cannot be coerced to a `HashType`!", byte),
         }
     }
@@ -180,10 +201,54 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
     cropped_dct.into_iter().map(|x| x >= mean).collect()
 }
 
+/// The guts of the gradient hash, 
+/// separate so we can reuse them for both `Gradient` and `DoubleGradient`.
+fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut Bitv) {
+    for row in resized.as_slice().chunks(hash_size as usize) {
+        for idx in 1 .. row.len() {
+            // These two should never be out of bounds, so we can skip bounds checking.
+            let this = unsafe { row.get_unchecked(idx) };
+            let last = unsafe { row.get_unchecked(idx - 1) };
+
+            bitv.push(last < this);
+        }
+
+        // Wrap the last comparison so we get `hash_size` total comparisons
+        let last = unsafe { row.get_unchecked(row.len() - 1) };
+        let first = unsafe { row.get_unchecked(0) };
+
+        bitv.push(last < first);
+    }
+
+    
+}
+
+fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+    let resized = img.gray_resize_square(hash_size);
+    let mut bitv = Bitv::with_capacity((hash_size * hash_size) as usize);
+
+    gradient_hash_impl(&resized, hash_size, &mut bitv); 
+
+    bitv
+}
+
+fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+    let resized = img.gray_resize_square(hash_size);
+    let mut bitv = Bitv::with_capacity((hash_size * hash_size * 2) as usize);
+
+    gradient_hash_impl(&resized, hash_size, &mut bitv);
+
+    // Rotate the image 90 degrees so rows become columns
+    let rotated: GrayImage = imageops::rotate90(&resized);
+    gradient_hash_impl(&rotated, hash_size, &mut bitv);
+
+    bitv
+}
+
 /// A trait for describing an image that can be successfully hashed.
 pub trait HashImage {
     /// Apply a grayscale filter and drop the alpha channel (if present),
-    /// then resize the image to `size` width by `size` height (making it square).
+    /// then resize the image to `size` by `size` (making it square).
     ///
     /// Returns a copy, leaving `self` unmodified.
     fn gray_resize_square(&self, size: u32) -> GrayImage;    
@@ -256,10 +321,23 @@ mod test {
         assert_eq!(decoded_result.unwrap(), hash1);
     }
 
-    #[bench]
-    fn bench_hash(b: &mut Bencher) {
-        let test_img = gen_test_img(1024, 1024);
+    fn bench_hash(b: &mut Bencher, hash_type: HashType) {
+        let test_img = gen_test_img(512, 512);
         
-        b.iter(|| ImageHash::hash(&test_img, 32, HashType::Mean));    
+        b.iter(|| ImageHash::hash(&test_img, 8, hash_type));    
     }
+
+    macro_rules! bench_hash {
+        ($bench_fn:ident : $hash_type:expr) => (
+            #[bench]
+            fn $bench_fn(b: &mut Bencher) {
+                bench_hash(b, $hash_type);
+            }
+        )
+    }
+
+    bench_hash! { bench_mean_hash : HashType::Mean }
+    bench_hash! { bench_gradient_hash : HashType::Gradient }
+    bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
+    bench_hash! { bench_dct_hash : HashType::DCT }
 }
