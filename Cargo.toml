@@ -1,7 +1,7 @@
 [package]
 
 name = "img_hash"
-version = "0.0.4"
+version = "0.1.0"
 authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
@@ -14,9 +14,12 @@ keywords = ["image", "hash", "perceptual", "difference"]
 
 repository = "http://github.com/cybergeek94/img_hash"
 
+[dependencies]
+rustc-serialize = "*"
+
+[dev-dependencies]
+rand = "*"
+
 [dependencies.image]
 git = "https://github.com/PistonDevelopers/image.git"
-
-[dependencies.rustc-serialize]
-git = "https://github.com/rust-lang/rustc-serialize"
 
