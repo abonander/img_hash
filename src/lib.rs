@@ -1,6 +1,6 @@
 #![feature(collections, core, hash)]
 // Silence feature warnings for test module.
-#![cfg_attr(test, feature(rand, test))]
+#![cfg_attr(test, feature(test))]
 
 extern crate image;
 extern crate "rustc-serialize" as serialize;
@@ -270,15 +270,16 @@ hash_img_impl! { GrayImage, GrayAlphaImage, RgbImage, RgbaImage, DynamicImage }
 
 #[cfg(test)]
 mod test {
+    extern crate rand;
     extern crate test;
 
     use image::{Rgba, ImageBuffer};
 
+    use self::rand::{weak_rng, Rng};
     use self::test::Bencher;
       
     use super::{HashType, ImageHash};
 
-    use std::rand::{weak_rng, Rng};
     
     type RgbaBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
