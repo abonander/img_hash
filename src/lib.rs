@@ -26,6 +26,7 @@ const FILTER_TYPE: FilterType = FilterType::Nearest;
 
 mod dct;
 
+
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
@@ -33,6 +34,7 @@ mod dct;
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct ImageHash {
     bitv: Bitv,
+    hash_type: HashType,
 }
 
 impl ImageHash {
@@ -41,9 +43,14 @@ impl ImageHash {
     /// Equivalent to counting the 1-bits of the XOR of the two `Bitv`.
     /// 
     /// Essential to determining the perceived difference between `self` and `other`.
+    ///
+    /// ###Panics
+    /// If `self` and `other` have differing hash types or hash sizes.
     pub fn dist(&self, other: &ImageHash) -> usize {
+        assert!(self.hash_type == other.hash_type,
+               "Image hashes must use the same algorithm for proper comparison!");
         assert!(self.bitv.len() == other.bitv.len(), 
-                "ImageHashes must be the same length for proper comparison!");
+                "Image hashes must be the same length for proper comparison!");
 
         self.bitv.iter().zip(other.bitv.iter())
             .filter(|&(left, right)| left != right).count()
@@ -61,40 +68,33 @@ impl ImageHash {
     }
     
     /// Get the hash size of this image. Should be equal to the number of bits in the hash.
-    pub fn size(&self) -> u32 { self.bitv.len() as u32}
+    pub fn size(&self) -> u32 { self.bitv.len() as u32 }
 
-    /// Create a hash of `img` with a length of `hash_size * hash_size`.
-    ///
-    /// If `fast == true`, use a simple average of the pixels (faster, but less accurate). 
-    /// Else, perform a Discrete Cosine Transform & Mean hash (slower, but more accurate).
-    ///
-    /// Setting `fast = true` produces hashes that are really only useful for
-    /// comparing *equality* and very *closely* similar images with minor edits or corrections. 
-    /// Strong color/gamma correction will throw off the hash. 
-    ///
-    /// In practice, on a fast computer, using `fast = false` won't drastically increase the hash
-    /// time for a single image. In a program that processes many images at once, the bottleneck
-    /// will likely be in loading and decoding the images, and not in the hash function.
-    pub fn hash<I: HashImage>(img: &I, hash_size: u32, fast: bool) -> ImageHash {
-        let hash = if fast {
-            fast_hash(img, hash_size)
-        } else {
-            dct_hash(img, hash_size)
-        };
+    /// Get the `HashType` that this `ImageHash` was created with.
+    pub fn hash_type(&self) -> HashType { self.hash_type }
+
+    /// Create a hash of `img` with a length of `hash_size * hash_size` using the hash algorithm
+    /// described by `hash_type`.
+    pub fn hash<I: HashImage>(img: &I, hash_size: u32, hash_type: HashType) -> ImageHash {
+        let hash = hash_type.hash(img, hash_size);
 
         assert!((hash_size * hash_size) as usize == hash.len());
 
         ImageHash {
             bitv: hash,
+            hash_type: hash_type,
         }
     }
 
     /// Create an `ImageHash` instance from the given Base64-encoded string.
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
         let data = try!(encoded_hash.from_base64());
+        // The hash type should be the first bit of the hash
+        let hash_type = HashType::from_byte(data.remove(0));
 
         Ok(ImageHash{
-            bitv: Bitv::from_bytes(&*data)
+            bitv: Bitv::from_bytes(&*data),
+            hash_type: hash_type,
         })
     }
 
@@ -102,17 +102,58 @@ impl ImageHash {
     ///
     /// Mostly for printing convenience.
     pub fn to_base64(&self) -> String {
-        self.bitv.to_bytes().to_base64(STANDARD)
+        let mut bytes = self.bitv.to_bytes();
+        // Insert the hash type as the first byte.
+        bytes.insert(0, self.hash_type.to_byte());
+
+        bytes.to_base64(STANDARD)
     }
 }
 
+/// An enum describing the hash algorithms that `img_hash` offers.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum HashType { 
+    /// Fastest, but inaccurate. Really only useful for finding duplicates.
+    Mean,
+    /// Slowest, but detects changes in color gamut and sometimes significant edits.
+    DCT,
+}
 
-fn fast_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+impl HashType {
+    fn hash<I: HashImage>(self, img: &I, hash_size: u32) -> Bitv {
+        use HashType::*; 
+
+        match self {
+            Mean => mean_hash(img, hash_size),
+            DCT => dct_hash(img, hash_size),
+        }
+    }
+
+    fn to_byte(self) -> u8 {
+        use HashType::*;
+
+        match self {
+            Mean => 1,
+            DCT => 2,
+        }
+    }
+
+    fn from_byte(byte: u8) -> HashType {
+        use HashType::*;
+
+        match byte {
+            1 => Mean,
+            2 => DCT,
+            _ => panic!("Byte {:?} cannot be coerced to a `HashType`!", byte),
+        }
+    }
+}
+
+fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
     let hash_values = img.gray_resize_square(hash_size).into_raw();
 
-    let hash_sq = hash_size * hash_size;
-
-    let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) / hash_sq;
+    let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) 
+        / hash_values.len() as u32;
 
     hash_values.into_iter().map(|x| x as u32 >= mean).collect()
 }
@@ -134,7 +175,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
     let cropped_dct = crop_dct(dct, original, new);
 
     let mean = cropped_dct.iter().fold(0f64, |b, &a| a + b) 
-        / (hash_size * hash_size) as f64;
+        / cropped_dct.len() as f64;
 
     cropped_dct.into_iter().map(|x| x >= mean).collect()
 }
@@ -170,7 +211,7 @@ mod test {
 
     use self::test::Bencher;
       
-    use super::ImageHash;
+    use super::{HashType, ImageHash};
 
     use std::rand::{weak_rng, Rng};
     
@@ -188,8 +229,8 @@ mod test {
     #[test]
     fn hash_equality() {
         let test_img = gen_test_img(1024, 1024);
-        let hash1 = ImageHash::hash(&test_img, 32, false);
-        let hash2 = ImageHash::hash(&test_img, 32, false);
+        let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
+        let hash2 = ImageHash::hash(&test_img, 32, HashType::Mean);
 
         assert_eq!(hash1, hash2);
     }
@@ -198,14 +239,14 @@ mod test {
     #[test]
     fn size() {
         let test_img = gen_test_img(1024, 1024);
-        let hash = ImageHash::hash(&test_img, 32, false);
+        let hash = ImageHash::hash(&test_img, 32, HashType::Mean);
         assert_eq!(32*32, hash.size());
     }
 
     #[test]
     fn base64_encoding_decoding() {
         let test_img = gen_test_img(1024, 1024);
-        let hash1 = ImageHash::hash(&test_img, 32, false);
+        let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
 
         let base64_string = hash1.to_base64();
         let decoded_result = ImageHash::from_base64(&*base64_string);
@@ -219,6 +260,6 @@ mod test {
     fn bench_hash(b: &mut Bencher) {
         let test_img = gen_test_img(1024, 1024);
         
-        b.iter(|| ImageHash::hash(&test_img, 32, false));    
+        b.iter(|| ImageHash::hash(&test_img, 32, HashType::Mean));    
     }
 }
