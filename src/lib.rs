@@ -1,3 +1,33 @@
+//! A crate that provides several perceptual hashing algorithms for images.
+//! Supports images opened with the [image][1] crate from Piston.
+//!
+//!
+//! ### Example
+//! Hash two images, then compute their percentage difference.
+//!
+//! ```rust
+//! extern crate image;
+//! extern crate img_hash;
+//! 
+//! use img_hash::{ImageHash, HashType};
+//! 
+//! fn main() {
+//!     let image1 = image::open(&Path::new("image1.png").unwrap()).unwrap();
+//!     let image2 = image::open(&Path::new("image2.png").unwrap()).unwrap();
+//!     
+//!     // These two lines produce hashes with 64 bits (8 ** 2),
+//!     // using the Gradient hash, a good middle ground between 
+//!     // the performance of Mean and the accuracy of DCT.
+//!     let hash1 = ImageHash::hash(&image1, 8, HashType::Gradient);
+//!     let hash2 = ImageHash::hash(&image2, 8, HashType::Gradient);
+//!     
+//!     println!("Image1 hash: {}", hash1.to_base64());
+//!     println!("Image2 hash: {}", hash2.to_base64());
+//!     
+//!     println!("% Difference: {}", hash1.dist_ratio(&hash2));
+//! }
+//! ```
+//! [1]: https://github.com/PistonDevelopers/image
 #![feature(collections, core, hash)]
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
@@ -86,6 +116,8 @@ impl ImageHash {
     }
 
     /// Create an `ImageHash` instance from the given Base64-encoded string.
+    /// ### Note:
+    /// **Not** compatible with Base64-encoded strings created before `HashType` was added.
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
         let mut data = try!(encoded_hash.from_base64());
         // The hash type should be the first bit of the hash
@@ -202,7 +234,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
 }
 
 /// The guts of the gradient hash, 
-/// separate so we can reuse them for both `Gradient` and `DoubleGradient`.
+/// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
 fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut Bitv) {
     for row in resized.as_slice().chunks(hash_size as usize) {
         for idx in 1 .. row.len() {
@@ -246,6 +278,8 @@ fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
 }
 
 /// A trait for describing an image that can be successfully hashed.
+///
+/// Implement this for custom image types.
 pub trait HashImage {
     /// Apply a grayscale filter and drop the alpha channel (if present),
     /// then resize the image to `size` by `size` (making it square).
