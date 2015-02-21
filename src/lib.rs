@@ -28,7 +28,7 @@
 //! }
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
-#![feature(collections, core, hash)]
+#![feature(collections, core)]
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
 
@@ -50,7 +50,7 @@ use image::{
 
 use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
 
-use std::collections::Bitv;
+use std::collections::BitVec;
 
 const FILTER_TYPE: FilterType = FilterType::Nearest;
 
@@ -63,14 +63,14 @@ mod dct;
 /// Get an instance with `ImageHash::hash()`.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct ImageHash {
-    bitv: Bitv,
+    bitv: BitVec,
     hash_type: HashType,
 }
 
 impl ImageHash {
 
     /// Calculate the Hamming distance between this and `other`.
-    /// Equivalent to counting the 1-bits of the XOR of the two `Bitv`.
+    /// Equivalent to counting the 1-bits of the XOR of the two `BitVec`.
     /// 
     /// Essential to determining the perceived difference between `self` and `other`.
     ///
@@ -124,7 +124,7 @@ impl ImageHash {
         let hash_type = HashType::from_byte(data.remove(0));
 
         Ok(ImageHash{
-            bitv: Bitv::from_bytes(&*data),
+            bitv: BitVec::from_bytes(&*data),
             hash_type: hash_type,
         })
     }
@@ -167,7 +167,7 @@ pub enum HashType {
 }
 
 impl HashType {
-    fn hash<I: HashImage>(self, img: &I, hash_size: u32) -> Bitv {
+    fn hash<I: HashImage>(self, img: &I, hash_size: u32) -> BitVec {
         use HashType::*; 
 
         match self {
@@ -202,7 +202,7 @@ impl HashType {
     }
 }
 
-fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     let hash_values = img.gray_resize_square(hash_size).into_raw();
 
     let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) 
@@ -211,7 +211,7 @@ fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
     hash_values.into_iter().map(|x| x as u32 >= mean).collect()
 }
 
-fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     let large_size = hash_size * 4;
 
     // We take a bigger resize than fast_hash, 
@@ -235,7 +235,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
 
 /// The guts of the gradient hash, 
 /// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
-fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut Bitv) {
+fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut BitVec) {
     for row in resized.as_slice().chunks(hash_size as usize) {
         for idx in 1 .. row.len() {
             // These two should never be out of bounds, so we can skip bounds checking.
@@ -255,18 +255,18 @@ fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut Bitv) {
     
 }
 
-fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     let resized = img.gray_resize_square(hash_size);
-    let mut bitv = Bitv::with_capacity((hash_size * hash_size) as usize);
+    let mut bitv = BitVec::with_capacity((hash_size * hash_size) as usize);
 
     gradient_hash_impl(&resized, hash_size, &mut bitv); 
 
     bitv
 }
 
-fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> Bitv {
+fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     let resized = img.gray_resize_square(hash_size);
-    let mut bitv = Bitv::with_capacity((hash_size * hash_size * 2) as usize);
+    let mut bitv = BitVec::with_capacity((hash_size * hash_size * 2) as usize);
 
     gradient_hash_impl(&resized, hash_size, &mut bitv);
 
