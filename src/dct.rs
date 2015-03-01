@@ -83,8 +83,7 @@ fn dct_1d(vec: &[f64]) -> Vec<f64> {
     out
 }
 
-pub fn crop_dct(dct: Vec<f64>, original: (usize, usize), new: (usize, usize)) 
-    -> Vec<f64> {
+pub fn crop_dct(dct: Vec<f64>, original: (usize, usize), new: (usize, usize)) -> Vec<f64> {
     let mut out = Vec::new();
 
     let (orig_width, orig_height) = original;
