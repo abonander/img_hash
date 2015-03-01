@@ -4,7 +4,7 @@ os:
 - osx
 env:
   global:
-    - secure: ZZu7tW/Uy+ZLQepLoksudhAGhmL8gV3riCo7gq6aUIEuPKz2qQf8WaYQxm2/W5VORaD6jWSDINONs2wNeK7lsZ0X11DoW7uQeMu8ysqFCWAjNj0xzBcH1IfzFSFo5cobYOCEQzSvLE3f+TyL2meIXheJNlQYF8eukILzT0x8GLE=
+    - secure: fRJ9UyMJ106TrwUFps7b+DRNehJdazKgfc5AqATeNvifn/arlJrr8oyWWv1/ewwy0JtEP0rU3s+aJKp2AM9zu4F9VnjeSIgq8BkRxwK5EKa6jD2+Jo5w++wBFVjqeyvzkDnt4TdUnEil5kWqV1En1uomyZiZ9hiXHcyXfy6Zddk=
 before_script:
 - rustc -V
 - cargo -V
