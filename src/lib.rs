@@ -33,7 +33,7 @@
 #![cfg_attr(test, feature(test))]
 
 extern crate image;
-extern crate "rustc-serialize" as serialize;
+extern crate rustc_serialize as serialize;
 
 use self::dct::{dct_2d, crop_dct};
 
@@ -320,8 +320,10 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
     let hash_values: Vec<_> = img.gray_resize_square(large_size)
         .into_raw().into_iter().map(|val| val as f64).collect();
 
-    let dct = dct_2d_func(hash_values.as_slice(),
-        large_size as usize, large_size as usize);
+    let dct = dct_2d_func(
+		&hash_values,
+        large_size as usize, large_size as usize
+	);
 
     let original = (large_size as usize, large_size as usize);
     let new = (hash_size as usize, hash_size as usize);
@@ -337,7 +339,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
 /// The guts of the gradient hash, 
 /// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
 fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut BitVec) {
-    for row in resized.as_slice().chunks(hash_size as usize) {
+    for row in resized.chunks(hash_size as usize) {
         for idx in 1 .. row.len() {
             // These two should never be out of bounds, so we can skip bounds checking.
             let this = unsafe { row.get_unchecked(idx) };
