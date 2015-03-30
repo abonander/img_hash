@@ -28,7 +28,7 @@
 //! }
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
-#![feature(collections, core, hash, unboxed_closures)]
+#![feature(collections, core, hash)]
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
 
@@ -191,6 +191,10 @@ impl DCT2DFunc {
     fn as_ptr(&self) -> *const () {
         self.0 as *const ()
     }
+
+    fn call(&self, data: &[f64], width: Width, height: Height) -> Vec<f64> {
+        (self.0)(data, width, height) 
+    } 
 }
 
 impl Clone for DCT2DFunc {
@@ -219,15 +223,6 @@ impl hash::Hash for DCT2DFunc {
     /// Adds the contained function pointer as `usize`.
     fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
         state.write_usize(self.as_ptr() as usize)
-    }
-}
-
-impl<'a> Fn<(&'a [f64], Width, Height)> for DCT2DFunc {
-    type Output = Vec<f64>;
-
-    /// Call the contained function, providing the given parameters.
-    extern "rust-call" fn call(&self,  (data, width, height): (&[f64], Width, Height)) -> Vec<f64> {
-        (self.0)(data, width, height)
     }
 }
 
@@ -320,7 +315,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
     let hash_values: Vec<_> = img.gray_resize_square(large_size)
         .into_raw().into_iter().map(|val| val as f64).collect();
 
-    let dct = dct_2d_func(
+    let dct = dct_2d_func.call(
 		&hash_values,
         large_size as usize, large_size as usize
 	);
