@@ -1,5 +1,4 @@
-use std::f64::consts::{PI, SQRT2};
-use std::num::Float;
+use std::f64::consts as f64_consts;
 
 pub fn dct_2d(packed_2d: &[f64], width: usize, height: usize) -> Vec<f64> {
     assert!(packed_2d.len() == width * height, 
@@ -69,12 +68,12 @@ fn dct_1d(vec: &[f64]) -> Vec<f64> {
         let mut z = 0f64;
 
         for x in 0 .. vec.len() {
-            z += vec[x] * (PI * u as f64 * (2 * x + 1) as f64 
+            z += vec[x] * (f64_consts::PI * u as f64 * (2 * x + 1) as f64 
                 / (2 * vec.len()) as f64).cos(); 
         }
 
         if u == 0 {
-            z *= 1f64 / SQRT2;
+            z *= 1f64 / f64_consts::SQRT_2;
         }
 
         out.insert(u, z / 2f64);

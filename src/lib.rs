@@ -28,7 +28,7 @@
 //! }
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
-#![feature(collections, core, hash)]
+#![feature(collections, hash)]
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
 
