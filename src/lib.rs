@@ -32,31 +32,21 @@
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
 
+#![cfg(any(test, feature = "rust-image"))]
 extern crate image;
 extern crate rustc_serialize as serialize;
 
 use self::dct::{dct_2d, crop_dct};
-
-use image::{
-    imageops,
-    DynamicImage,
-    FilterType,
-    GrayImage,
-    GrayAlphaImage,
-    ImageBuffer,
-    Pixel,
-    RgbImage,
-    RgbaImage,
-};
 
 use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
 
 use std::collections::BitVec;
 use std::{fmt, hash};
 
-const FILTER_TYPE: FilterType = FilterType::Nearest;
-
 mod dct;
+
+#[cfg(any(test, feature = "rust-image"))]
+mod rust_image;
 
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
@@ -123,17 +113,15 @@ impl ImageHash {
     /// If `width * height != self.bitv.len()`.
     /// If you want a differently sized image then you should resize it yourself 
     /// using `image::imageops::resize()`.
-    pub fn visualize(&self, width: u32, height: u32) -> GrayImage {
+    pub fn visualize(&self, width: u32, height: u32) -> LumaBytes {
         assert!(
             (width * height) as usize == self.bitv.len(), 
             "`width * height` must equal `self.bitv.len()!`"
         );
 
-        let pixels: Vec<u8> = self.bitv.iter()
+        self.bitv.iter()
             .map(|bit| (bit as u8) * 0xff)
-            .collect();
-
-        ImageBuffer::from_vec(width, height, pixels).unwrap()
+            .collect()
     }
 
     /// Create an `ImageHash` instance from the given Base64-encoded string.
@@ -299,7 +287,7 @@ impl HashType {
 }
 
 fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
-    let hash_values = img.gray_resize_square(hash_size).into_raw();
+    let hash_values = img.to_hashable(hash_size);
 
     let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) 
         / hash_values.len() as u32;
@@ -312,8 +300,8 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
 
     // We take a bigger resize than fast_hash, 
     // then we only take the lowest corner of the DCT
-    let hash_values: Vec<_> = img.gray_resize_square(large_size)
-        .into_raw().into_iter().map(|val| val as f64).collect();
+    let hash_values: Vec<_> = img.to_hashable(large_size)
+        .into_iter().map(|val| val as f64).collect();
 
     let dct = dct_2d_func.call(
 		&hash_values,
@@ -333,7 +321,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
 
 /// The guts of the gradient hash, 
 /// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
-fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut BitVec) {
+fn gradient_hash_impl(resized: &[u8], hash_size: u32, bitv: &mut BitVec) {
     for row in resized.chunks(hash_size as usize) {
         for idx in 1 .. row.len() {
             // These two should never be out of bounds, so we can skip bounds checking.
@@ -352,7 +340,7 @@ fn gradient_hash_impl(resized: &GrayImage, hash_size: u32, bitv: &mut BitVec) {
 }
 
 fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
-    let resized = img.gray_resize_square(hash_size);
+    let resized = img.to_hashable(hash_size);
     let mut bitv = BitVec::with_capacity((hash_size * hash_size) as usize);
 
     gradient_hash_impl(&resized, hash_size, &mut bitv); 
@@ -361,17 +349,32 @@ fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
 }
 
 fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
-    let resized = img.gray_resize_square(hash_size);
+    let mut hash_values = img.to_hashable(hash_size);
     let mut bitv = BitVec::with_capacity((hash_size * hash_size * 2) as usize);
 
-    gradient_hash_impl(&resized, hash_size, &mut bitv);
+    gradient_hash_impl(&hash_values, hash_size, &mut bitv);
 
-    // Rotate the image 90 degrees so rows become columns
-    let rotated: GrayImage = imageops::rotate90(&resized);
-    gradient_hash_impl(&rotated, hash_size, &mut bitv);
+    // Swap rows and columns
+    swap_rows_columns_square(&mut hash_values, hash_size);
+    gradient_hash_impl(&hash_values, hash_size, &mut bitv);
 
     bitv
 }
+
+// swap rows with columns
+fn swap_rows_columns_square(bytes: &mut [u8], side: u32) {
+    let side = side as usize;
+
+    assert!(bytes.len() == side * side);
+
+    for x in 0..side {
+        for y in 0..side {
+            bytes.swap(x + side * y, y + side * x);
+        }
+    }
+}
+/// A byte vector representing an 8-bit grayscale image.
+pub type LumaBytes = Vec<u8>;
 
 /// A trait for describing an image that can be successfully hashed.
 ///
@@ -381,22 +384,10 @@ pub trait HashImage {
     /// then resize the image to `size` by `size` (making it square).
     ///
     /// Returns a copy, leaving `self` unmodified.
-    fn gray_resize_square(&self, size: u32) -> GrayImage;    
+    fn to_hashable(&self, size: u32) -> LumaBytes;    
 }
 
-macro_rules! hash_img_impl {
-    ($ty:ty) => (
-        impl HashImage for $ty {
-            fn gray_resize_square(&self, size: u32) -> GrayImage {
-                let ref gray = imageops::grayscale(self);
-                imageops::resize(gray, size, size, FILTER_TYPE)
-            }
-        }
-    );
-    ($($ty:ty),+) => ( $(hash_img_impl! { $ty })+ );
-}
 
-hash_img_impl! { GrayImage, GrayAlphaImage, RgbImage, RgbaImage, DynamicImage }
 
 #[cfg(test)]
 mod test {
