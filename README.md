@@ -1,4 +1,4 @@
-img_hash [![Build Status](https://travis-ci.org/cybergeek94/img_hash.svg?branch=master)](https://travis-ci.org/cybergeek94/img_hash)
+img_hash [![Build Status](https://travis-ci.org/cybergeek94/img-hash.svg?branch=master)](https://travis-ci.org/cybergeek94/img-hash)
 ========
 
 A library for getting perceptual hash values of images.
