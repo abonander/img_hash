@@ -32,7 +32,7 @@
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
 
-#![cfg(any(test, feature = "rust-image"))]
+#[cfg(any(test, feature = "rust-image"))]
 extern crate image;
 extern crate rustc_serialize as serialize;
 
@@ -44,7 +44,6 @@ use std::collections::BitVec;
 use std::{fmt, hash};
 
 mod dct;
-
 #[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
 
