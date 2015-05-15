@@ -44,6 +44,7 @@ use std::collections::BitVec;
 use std::{fmt, hash};
 
 mod dct;
+
 #[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
 
@@ -385,8 +386,6 @@ pub trait HashImage {
     /// Returns a copy, leaving `self` unmodified.
     fn to_hashable(&self, size: u32) -> LumaBytes;    
 }
-
-
 
 #[cfg(test)]
 mod test {

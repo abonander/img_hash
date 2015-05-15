@@ -22,11 +22,9 @@ rustc-serialize = "*"
 
 [dev-dependencies]
 rand = "*"
-
-[dev-dependencies.image]
-git = "https://github.com/PistonDevelopers/image"
+image = "*"
 
 [dependencies.image]
-git = "https://github.com/PistonDevelopers/image"
+version = "*"
 optional = true
 
