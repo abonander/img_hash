@@ -1,6 +1,6 @@
 [package]
 
-name = "img-hash"
+name = "img_hash"
 version = "0.5.0"
 authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
@@ -12,7 +12,7 @@ documentation = "http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/"
 
 keywords = ["image", "hash", "perceptual", "difference"]
 
-repository = "http://github.com/cybergeek94/img-hash"
+repository = "http://github.com/cybergeek94/img_hash"
 
 [features]
 rust-image = ["image"]
