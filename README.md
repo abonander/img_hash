@@ -9,7 +9,7 @@ http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html (Accessed Aug
 Thanks to Emil Mikulic for the 2D Discrete Cosine Transform implementation in C, ported to Rust in `src/dct.rs`:  
 http://unix4lyfe.org/dct/ (Implementation: http://unix4lyfe.org/dct/listing2.c) (Accessed August 2014)
 
-Depends on the [image][1] crate from Piston.
+With the `rust-image` feature, this crate can operate directly on buffers from the [PistonDevelopers/image][1] crate.
 
 [1]: https://github.com/PistonDevelopers/image 
 
@@ -22,6 +22,8 @@ Add `img_hash` to your `Cargo.toml`:
 
     [dependencies.img_hash]
     git = "https://github.com/cybergeek94/img_hash"
+    # For interop with `image`:
+    features = ["rust-image"]
     
 Example program:
 
