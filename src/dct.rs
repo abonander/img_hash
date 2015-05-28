@@ -7,18 +7,36 @@ pub fn dct_2d(packed_2d: &[f64], width: usize, height: usize) -> Vec<f64> {
     let packed_2d = packed_2d.to_vec();
 
     let rows = rows(packed_2d, width, height);
-    let dct_rows: Vec<Vec<f64>> = rows.iter()
-        .map(|row| dct_1d(&**row)).collect();
+    let dct_rows = dct_2d_part(rows);
 
     let columns = columns(dct_rows, width, height);
-    let dct_columns: Vec<Vec<f64>> = columns.iter()
-        .map(|col| dct_1d(&**col)).collect();
+    let dct_columns = dct_2d_part(columns);
 
     from_columns(dct_columns, width, height)
 }
 
+#[cfg(feature = "dct-simd")]
+fn dct_2d_part(data: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+    let mut out = Vec::with_capacity(data.len());
+
+    for chunk in data.chunks(2) {
+        if chunk.len() == 2 {
+            out.extend(::dct_simd::dct_1dx2(chunk));
+        } else {
+            out.extend(chunk.iter().map(|vec| dct_1d(vec)));
+        }
+    }
+
+    out
+}
+
+#[cfg(not(feature = "dct-simd"))]
+fn dct_2d_part(data: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+    data.iter().map(|row| dct_1d(row)).collect()
+}
+
 fn rows(packed_2d: Vec<f64>, width: usize, height: usize) -> Vec<Vec<f64>> {
-    let mut rows: Vec<Vec<f64>> = Vec::new();
+    let mut rows: Vec<Vec<f64>> = Vec::with_capacity(height);
 
     for y in 0 .. height {
         let start = y * width;
@@ -57,6 +75,7 @@ fn from_columns(columns: Vec<Vec<f64>>, width: usize, height: usize) -> Vec<f64>
     packed
 }
 
+
 // Converted from the C implementation here:
 // http://unix4lyfe.org/dct/listing2.c
 // Source page:
@@ -73,7 +92,7 @@ fn dct_1d(vec: &[f64]) -> Vec<f64> {
         }
 
         if u == 0 {
-            z *= 1f64 / f64_consts::SQRT_2;
+            z *= 1.0 / f64_consts::SQRT_2;
         }
 
         out.insert(u, z / 2f64);

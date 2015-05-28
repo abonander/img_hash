@@ -48,6 +48,9 @@ mod dct;
 #[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
 
+#[cfg(feature = "dct-simd")]
+mod dct_simd;
+
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///

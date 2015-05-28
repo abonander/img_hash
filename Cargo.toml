@@ -16,6 +16,7 @@ repository = "http://github.com/cybergeek94/img_hash"
 
 [features]
 rust-image = ["image"]
+dct-simd = ["simdty", "llvmint"]
 
 [dependencies]
 rustc-serialize = "*"
@@ -25,6 +26,14 @@ rand = "*"
 image = "*"
 
 [dependencies.image]
+version = "*"
+optional = true
+
+[dependencies.simdty]
+version = "*"
+optional = true
+
+[dependencies.llvmint]
 version = "*"
 optional = true
 
