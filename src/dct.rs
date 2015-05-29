@@ -68,8 +68,8 @@ fn dct_1d(vec: &[f64]) -> Vec<f64> {
         let mut z = 0f64;
 
         for x in 0 .. vec.len() {
-            z += vec[x] * (f64_consts::PI * u as f64 * (2 * x + 1) as f64 
-                / (2 * vec.len()) as f64).cos(); 
+            z += vec[x] * cos_approx(f64_consts::PI * u as f64 * (2 * x + 1) as f64 
+                / (2 * vec.len()) as f64); 
         }
 
         if u == 0 {
@@ -101,5 +101,16 @@ pub fn crop_dct(dct: Vec<f64>, original: (usize, usize), new: (usize, usize)) ->
     }
 
     out
+}
+
+/// Approximate `cos(x)` using a 4-term Taylor series. Can be expanded for higher precision.
+#[inline(always)]
+fn cos_approx(x: f64) -> f64 {
+    let x2 = x.powi(2);
+    let x4 = x2.powi(2);
+    let x6 = x4.powi(2);
+    let x8 = x6.powi(2);
+
+    1.0 - (x2 / 2.0) + (x4 / 24.0) - (x6 / 720.0) + (x8 / 40320.0)
 }
 
