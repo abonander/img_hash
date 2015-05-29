@@ -296,19 +296,16 @@ fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
 }
 
 fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> BitVec {
-    let large_size = hash_size * 4;
+    let large_size = (hash_size * 4) as usize;
 
     // We take a bigger resize than fast_hash, 
     // then we only take the lowest corner of the DCT
-    let hash_values: Vec<_> = img.to_hashable(large_size)
-        .into_iter().map(|val| val as f64).collect();
+    let hash_values: Vec<_> = img.to_hashable(large_size as u32)
+        .into_iter().map(|val| (val as f64) / 255.0).collect();
 
-    let dct = dct_2d_func.call(
-		&hash_values,
-        large_size as usize, large_size as usize
-	);
+    let dct = dct_2d_func.call(&hash_values, large_size, large_size);
 
-    let original = (large_size as usize, large_size as usize);
+    let original = (large_size, large_size);
     let new = (hash_size as usize, hash_size as usize);
 
     let cropped_dct = crop_dct(dct, original, new);

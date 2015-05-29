@@ -1,5 +1,3 @@
-use std::f64::consts as f64_consts;
-
 pub fn dct_2d(packed_2d: &[f64], width: usize, height: usize) -> Vec<f64> {
     assert!(packed_2d.len() == width * height, 
             "Slice length must be width * height!");
@@ -62,21 +60,25 @@ fn from_columns(columns: Vec<Vec<f64>>, width: usize, height: usize) -> Vec<f64>
 // Source page:
 // http://unix4lyfe.org/dct/ (Accessed 8/10/2014)
 fn dct_1d(vec: &[f64]) -> Vec<f64> {
+    use std::f64::consts::{PI, SQRT_2};
+
     let mut out = Vec::new();
 
     for u in 0 .. vec.len() {
-        let mut z = 0f64;
+        let mut z = 0.0;
 
         for x in 0 .. vec.len() {
-            z += vec[x] * cos_approx(f64_consts::PI * u as f64 * (2 * x + 1) as f64 
-                / (2 * vec.len()) as f64); 
+            z += vec[x] * cos_approx(
+                PI * u as f64 * (2 * x + 1) as f64 
+                    / (2 * vec.len()) as f64
+            );
         }
 
         if u == 0 {
-            z *= 1f64 / f64_consts::SQRT_2;
+            z *= 1.0 / SQRT_2;
         }
 
-        out.insert(u, z / 2f64);
+        out.insert(u, z / 2.0);
     }
 
     out
@@ -107,10 +109,36 @@ pub fn crop_dct(dct: Vec<f64>, original: (usize, usize), new: (usize, usize)) ->
 #[inline(always)]
 fn cos_approx(x: f64) -> f64 {
     let x2 = x.powi(2);
-    let x4 = x2.powi(2);
-    let x6 = x4.powi(2);
-    let x8 = x6.powi(2);
+    let x4 = x.powi(4);
+    let x6 = x.powi(6);
+    let x8 = x.powi(8);
 
     1.0 - (x2 / 2.0) + (x4 / 24.0) - (x6 / 720.0) + (x8 / 40320.0)
 }
+
+#[test]
+fn test_cos_approx() {
+    use std::f64::consts::PI;
+
+    const ERROR: f64 = 0.05;
+
+    fn test_cos_approx(x: f64) {
+        let approx = cos_approx(x);
+        let cos = x.cos();
+
+        assert!(
+            approx.abs_sub(x.cos()) <= ERROR, 
+            "Approximation cos({x}) = {approx} was outside a tolerance of {error}; control value: {cos}",
+            x = x, approx = approx, error = ERROR, cos = cos,
+        );
+    }
+
+    let test_values = &[PI, PI / 2.0, PI / 4.0, 1.0, -1.0];
+
+    for &x in test_values {
+        test_cos_approx(x);
+        test_cos_approx(-x);
+    }
+}
+
 
