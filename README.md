@@ -1,6 +1,8 @@
 img_hash [![Build Status](https://travis-ci.org/cybergeek94/img_hash.svg?branch=master)](https://travis-ci.org/cybergeek94/img_hash)
 ========
 
+##### Now builds on the Rust stable channel!
+
 A library for getting perceptual hash values of images.
 
 Thanks to Dr. Neal Krawetz for the outlines of the Mean (aHash), Gradient (dHash), and DCT (pHash) perceptual hash algorithms:  
