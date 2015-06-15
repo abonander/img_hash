@@ -99,7 +99,7 @@ pub fn crop_dct(dct: Vec<f64>, original: (usize, usize), new: (usize, usize)) ->
         let start = y * orig_width;
         let end = start + new_width;
 
-        out.push_all(&dct[start .. end]);
+        out.extend(dct[start .. end].iter().cloned());
     }
 
     out

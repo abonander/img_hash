@@ -28,9 +28,10 @@
 //! }
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
-#![feature(collections, hash)]
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
+
+extern crate bit_vec;
 
 #[cfg(any(test, feature = "rust-image"))]
 extern crate image;
@@ -40,7 +41,8 @@ use self::dct::{dct_2d, crop_dct};
 
 use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
 
-use std::collections::BitVec;
+use bit_vec::BitVec;
+
 use std::{fmt, hash};
 
 mod dct;
@@ -210,7 +212,7 @@ impl fmt::Debug for DCT2DFunc {
 impl hash::Hash for DCT2DFunc {
     /// Adds the contained function pointer as `usize`.
     fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
-        state.write_usize(self.as_ptr() as usize)
+       (self.as_ptr() as usize).hash(state) 
     }
 }
 
