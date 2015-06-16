@@ -8,9 +8,6 @@ A library for getting perceptual hash values of images.
 Thanks to Dr. Neal Krawetz for the outlines of the Mean (aHash), Gradient (dHash), and DCT (pHash) perceptual hash algorithms:  
 http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html (Accessed August 2014)
 
-Thanks to Emil Mikulic for the 2D Discrete Cosine Transform implementation in C, ported to Rust in `src/dct.rs`:  
-http://unix4lyfe.org/dct/ (Implementation: http://unix4lyfe.org/dct/listing2.c) (Accessed August 2014)
-
 With the `rust-image` feature, this crate can operate directly on buffers from the [PistonDevelopers/image][1] crate.
 
 [1]: https://github.com/PistonDevelopers/image 
