@@ -1,7 +1,7 @@
 img_hash [![Build Status](https://travis-ci.org/cybergeek94/img_hash.svg?branch=master)](https://travis-ci.org/cybergeek94/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
 ========
 
-##### Now builds on stable Rust! (But needs nightly to test.)
+##### Now builds on stable Rust! (But needs nightly to bench.)
 
 A library for getting perceptual hash values of images.
 
@@ -48,4 +48,12 @@ fn main() {
     println!("% Difference: {}", hash1.dist_ratio(&hash2));
 }
 ```
-    
+   
+Benchmarking
+============
+
+In order to build and test on Rust stable, the benchmarks have to be placed behind a feature gate. If you have Rust nightly installed and want to run benchmarks, use the following command:
+
+```
+cargo bench --features bench
+```
