@@ -18,7 +18,9 @@ repository = "http://github.com/cybergeek94/img_hash"
 rust-image = ["image"]
 
 [dependencies]
+bit-vec = "*"
 rustc-serialize = "*"
+stream-dct = "*"
 
 [dev-dependencies]
 rand = "*"

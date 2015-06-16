@@ -28,22 +28,25 @@
 //! }
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
-#![feature(collections, hash)]
 // Silence feature warnings for test module.
 #![cfg_attr(test, feature(test))]
 
+extern crate bit_vec;
+
+extern crate stream_dct;
+
 #[cfg(any(test, feature = "rust-image"))]
 extern crate image;
-extern crate rustc_serialize as serialize;
 
-use self::dct::{dct_2d, crop_dct};
+extern crate rustc_serialize as serialize;
 
 use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
 
-use std::collections::BitVec;
-use std::{fmt, hash};
+use bit_vec::BitVec;
 
-mod dct;
+use stream_dct::dct_2d;
+
+use std::{fmt, hash};
 
 #[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
@@ -152,15 +155,13 @@ impl ImageHash {
     }
 }
 
-pub type Width = usize;
-pub type Height = usize;
+pub type Rowstride = usize;
 
 /// A 2-dimensional Discrete Cosine Transform function that receives 
 /// and returns 1-dimensional packed data.
 ///
 /// The function will be provided the pre-hash data as a 1D-packed vector, 
-/// which should be interpreted as a 2D matrix with width and height 
-/// provided by the two `usize` parameters:
+/// which should be interpreted as a 2D matrix with a given rowstride:
 ///
 /// ```notest
 /// Pre-hash data:
@@ -168,20 +169,20 @@ pub type Height = usize;
 /// [ 4.0 5.0 6.0 ]
 /// [ 7.0 8.0 9.0 ]
 ///
-/// Packed: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0] (width 3, height 3)
+/// Packed: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0] (rowstride 3)
 /// ```
 ///
 /// The function should then return a new 1D vector of the DCT values packed in the same manner.
 #[derive(Copy)]
-pub struct DCT2DFunc(pub fn(&[f64], Width, Height) -> Vec<f64>);
+pub struct DCT2DFunc(pub fn(&[f64], Rowstride) -> Vec<f64>);
 
 impl DCT2DFunc {
     fn as_ptr(&self) -> *const () {
         self.0 as *const ()
     }
 
-    fn call(&self, data: &[f64], width: Width, height: Height) -> Vec<f64> {
-        (self.0)(data, width, height) 
+    fn call(&self, data: &[f64], rowstride: Rowstride) -> Vec<f64> {
+        (self.0)(data, rowstride) 
     } 
 }
 
@@ -210,7 +211,7 @@ impl fmt::Debug for DCT2DFunc {
 impl hash::Hash for DCT2DFunc {
     /// Adds the contained function pointer as `usize`.
     fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
-        state.write_usize(self.as_ptr() as usize)
+       (self.as_ptr() as usize).hash(state) 
     }
 }
 
@@ -303,12 +304,12 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
     let hash_values: Vec<_> = img.to_hashable(large_size as u32)
         .into_iter().map(|val| (val as f64) / 255.0).collect();
 
-    let dct = dct_2d_func.call(&hash_values, large_size, large_size);
+    let dct = dct_2d_func.call(&hash_values, large_size);
 
     let original = (large_size, large_size);
     let new = (hash_size as usize, hash_size as usize);
 
-    let cropped_dct = crop_dct(dct, original, new);
+    let cropped_dct = crop_2d_dct(&dct, original, new);
 
     let mean = cropped_dct.iter().fold(0f64, |b, &a| a + b) 
         / cropped_dct.len() as f64;
@@ -384,6 +385,24 @@ pub trait HashImage {
     fn to_hashable(&self, size: u32) -> LumaBytes;    
 }
 
+/// Crop the values off a 1D-packed 2D DCT
+fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) -> Vec<f64> {
+    let (orig_width, orig_height) = original;
+
+    assert!(packed.len() == orig_width * orig_height);
+
+    let (new_width, new_height) = new;
+
+    assert!(new_width < orig_width && new_height < orig_height);
+
+    (0 .. new_height).flat_map(|y| {
+        let start = y * orig_width;
+        let end = start + new_width;
+
+        packed[start .. end].iter().cloned()
+    }).collect()
+}
+
 #[cfg(test)]
 mod test {
     extern crate rand;
@@ -418,7 +437,7 @@ mod test {
 
     #[test]
     fn dct_2d_equality() {
-        fn dummy_dct(_ : &[f64], _: usize, _: usize) -> Vec<f64> {
+        fn dummy_dct(_ : &[f64], _: usize) -> Vec<f64> {
             unimplemented!();
         }
 
@@ -430,11 +449,11 @@ mod test {
 
     #[test]
     fn dct_2d_inequality() {
-        fn dummy_dct(_ : &[f64], _: usize, _: usize) -> Vec<f64> {
+        fn dummy_dct(_ : &[f64], _: usize) -> Vec<f64> {
             unimplemented!();
         }
 
-        fn dummy_dct_2(_ : &[f64], _: usize, _: usize) -> Vec<f64> {
+        fn dummy_dct_2(_ : &[f64], _: usize) -> Vec<f64> {
             unimplemented!();
         }
 
