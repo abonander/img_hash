@@ -29,7 +29,7 @@
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
 // Silence feature warnings for test module.
-#![cfg_attr(test, feature(test))]
+#![cfg_attr(all(test, feature = "bench"), feature(test))]
 
 extern crate bit_vec;
 
@@ -406,12 +406,10 @@ fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) ->
 #[cfg(test)]
 mod test {
     extern crate rand;
-    extern crate test;
 
     use image::{Rgba, ImageBuffer};
 
     use self::rand::{weak_rng, Rng};
-    use self::test::Bencher;
 
     use super::{DCT2DFunc, HashType, ImageHash};
 
@@ -481,25 +479,36 @@ mod test {
         assert!(decoded_result.is_ok());
 
         assert_eq!(decoded_result.unwrap(), hash1);
-    }
+    }  
 
-    fn bench_hash(b: &mut Bencher, hash_type: HashType) {
-        let test_img = gen_test_img(512, 512);
+    #[cfg(feature = "bench")] 
+    mod bench {
+        use super::gen_test_img;
+
+        extern crate test;
+
+        use ::{HashType, ImageHash};
         
-        b.iter(|| ImageHash::hash(&test_img, 8, hash_type));    
-    }
+        use self::test::Bencher;
 
-    macro_rules! bench_hash {
-        ($bench_fn:ident : $hash_type:expr) => (
-            #[bench]
-            fn $bench_fn(b: &mut Bencher) {
-                bench_hash(b, $hash_type);
-            }
-        )
-    }
+        fn bench_hash(b: &mut Bencher, hash_type: HashType) {
+            let test_img = gen_test_img(512, 512);
+        
+            b.iter(|| ImageHash::hash(&test_img, 8, hash_type));    
+        }
 
-    bench_hash! { bench_mean_hash : HashType::Mean }
-    bench_hash! { bench_gradient_hash : HashType::Gradient }
-    bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
-    bench_hash! { bench_dct_hash : HashType::DCT }
+        macro_rules! bench_hash {
+            ($bench_fn:ident : $hash_type:expr) => (
+                #[bench]
+                fn $bench_fn(b: &mut Bencher) {
+                    bench_hash(b, $hash_type);
+                }
+            )
+        }
+
+        bench_hash! { bench_mean_hash : HashType::Mean }
+        bench_hash! { bench_gradient_hash : HashType::Gradient }
+        bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
+        bench_hash! { bench_dct_hash : HashType::DCT }
+    }
 }
