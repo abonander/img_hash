@@ -30,6 +30,7 @@ Example program:
 extern crate image;
 extern crate img_hash;
 
+use std::path::Path;
 use img_hash::{ImageHash, HashType};
 
 fn main() {
