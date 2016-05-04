@@ -41,6 +41,7 @@ extern crate image;
 extern crate rustc_serialize as serialize;
 
 use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
+use serialize::base64::FromBase64Error::*;
 
 use bit_vec::BitVec;
 
@@ -135,6 +136,9 @@ impl ImageHash {
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
         let mut data = try!(encoded_hash.from_base64());
         // The hash type should be the first bit of the hash
+        if data.len() == 0 {
+            return Err(FromBase64Error::InvalidBase64Length);
+        }
         let hash_type = HashType::from_byte(data.remove(0));
 
         Ok(ImageHash{
@@ -481,7 +485,19 @@ mod test {
         assert_eq!(decoded_result.unwrap(), hash1);
     }  
 
-    #[cfg(feature = "bench")] 
+    #[test]
+    fn base64_error_on_empty() {
+        let decoded_result = ImageHash::from_base64("");
+        assert!(decoded_result.is_err());
+        /* FIXME: Figure out how to make the below run
+        match decoded_result {
+            Err(FromBase64Error::InvalidBase64Length) => assert!(true),
+            Err(InvalidBase64Byte) => assert!(false, "Expected a invalid length error"),
+            Ok(_) => assert!(false, "Expected a invalid length error"),
+        };*/
+    }
+
+    #[cfg(feature = "bench")]
     mod bench {
         use super::gen_test_img;
 
