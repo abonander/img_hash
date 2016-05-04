@@ -40,8 +40,9 @@ extern crate image;
 
 extern crate rustc_serialize as serialize;
 
-use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
-use serialize::base64::FromBase64Error::*;
+use serialize::base64::{ToBase64, FromBase64, STANDARD};
+// Needs to be fully qualified
+pub use serialize::base64::FromBase64Error;
 
 use bit_vec::BitVec;
 
@@ -411,6 +412,8 @@ fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) ->
 mod test {
     extern crate rand;
 
+    use serialize::base64::*;
+
     use image::{Rgba, ImageBuffer};
 
     use self::rand::{weak_rng, Rng};
@@ -488,13 +491,10 @@ mod test {
     #[test]
     fn base64_error_on_empty() {
         let decoded_result = ImageHash::from_base64("");
-        assert!(decoded_result.is_err());
-        /* FIXME: Figure out how to make the below run
         match decoded_result {
-            Err(FromBase64Error::InvalidBase64Length) => assert!(true),
-            Err(InvalidBase64Byte) => assert!(false, "Expected a invalid length error"),
-            Ok(_) => assert!(false, "Expected a invalid length error"),
-        };*/
+            Err(InvalidBase64Length) => (),
+            _ => panic!("Expected a invalid length error")
+        };
     }
 
     #[cfg(feature = "bench")]
