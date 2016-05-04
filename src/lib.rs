@@ -132,8 +132,10 @@ impl ImageHash {
     /// Create an `ImageHash` instance from the given Base64-encoded string.
     /// ## Note:
     /// **Not** compatible with Base64-encoded strings created before `HashType` was added.
-    /// Returns a FromBase64Error::InvalidBase64Length when trying to hash a zero-length string
+    ///
     /// Does **not** preserve the internal value of `HashType::UserDCT`.
+    /// ## Errors:
+    /// Returns a FromBase64Error::InvalidBase64Length when trying to hash a zero-length string
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
         let mut data = try!(encoded_hash.from_base64());
         // The hash type should be the first bit of the hash
