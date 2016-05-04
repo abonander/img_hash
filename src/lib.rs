@@ -40,7 +40,9 @@ extern crate image;
 
 extern crate rustc_serialize as serialize;
 
-use serialize::base64::{ToBase64, STANDARD, FromBase64, FromBase64Error};
+use serialize::base64::{ToBase64, FromBase64, STANDARD};
+// Needs to be fully qualified
+pub use serialize::base64::FromBase64Error;
 
 use bit_vec::BitVec;
 
@@ -132,9 +134,14 @@ impl ImageHash {
     /// **Not** compatible with Base64-encoded strings created before `HashType` was added.
     ///
     /// Does **not** preserve the internal value of `HashType::UserDCT`.
+    /// ## Errors:
+    /// Returns a FromBase64Error::InvalidBase64Length when trying to hash a zero-length string
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
         let mut data = try!(encoded_hash.from_base64());
         // The hash type should be the first bit of the hash
+        if data.len() == 0 {
+            return Err(FromBase64Error::InvalidBase64Length);
+        }
         let hash_type = HashType::from_byte(data.remove(0));
 
         Ok(ImageHash{
@@ -407,6 +414,8 @@ fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) ->
 mod test {
     extern crate rand;
 
+    use serialize::base64::*;
+
     use image::{Rgba, ImageBuffer};
 
     use self::rand::{weak_rng, Rng};
@@ -481,7 +490,16 @@ mod test {
         assert_eq!(decoded_result.unwrap(), hash1);
     }  
 
-    #[cfg(feature = "bench")] 
+    #[test]
+    fn base64_error_on_empty() {
+        let decoded_result = ImageHash::from_base64("");
+        match decoded_result {
+            Err(InvalidBase64Length) => (),
+            _ => panic!("Expected a invalid length error")
+        };
+    }
+
+    #[cfg(feature = "bench")]
     mod bench {
         use super::gen_test_img;
 
