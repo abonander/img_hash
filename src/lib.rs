@@ -48,7 +48,7 @@ use bit_vec::BitVec;
 
 use stream_dct::dct_2d;
 
-use std::{fmt, hash};
+use std::{fmt, hash, ops};
 
 #[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
@@ -295,7 +295,7 @@ impl HashType {
 }
 
 fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
-    let hash_values = img.to_hashable(hash_size);
+    let hash_values = img.to_hashable(hash_size, hash_size);
 
     let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) 
         / hash_values.len() as u32;
@@ -308,7 +308,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
 
     // We take a bigger resize than fast_hash, 
     // then we only take the lowest corner of the DCT
-    let hash_values: Vec<_> = img.to_hashable(large_size as u32)
+    let hash_values: Vec<_> = img.to_hashable(large_size as u32, large_size as u32)
         .into_iter().map(|val| (val as f64) / 255.0).collect();
 
     let dct = dct_2d_func.call(&hash_values, large_size);
@@ -324,60 +324,93 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
     cropped_dct.into_iter().map(|x| x >= mean).collect()
 }
 
+struct Columns<'a, T: 'a> {
+    data: &'a [T],
+    rowstride: usize,
+    curr: usize,
+}
+
+impl<'a, T: 'a> Columns<'a, T> {
+    fn from_slice(data: &'a [T], rowstride: usize) -> Self {
+        Columns {
+            data: data,
+            rowstride: rowstride,
+            curr: 0,
+        }
+    }
+}
+
+impl<'a, T: 'a> Iterator for Columns<'a, T> {
+    type Item = Column<'a, T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.curr < self.rowstride {
+            let data = &self.data[self.curr..];
+            self.curr += 1;
+            Some(Column {
+                data: data,
+                rowstride: self.rowstride,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+struct Column<'a, T: 'a> {
+    data: &'a [T],
+    rowstride: usize,
+}
+
+impl<'a, T: 'a> ops::Index<usize> for Column<'a, T> {
+    type Output = T;
+    fn index(&self, idx: usize) -> &T {
+       &self.data[idx * self.rowstride]
+    }
+}
+
 /// The guts of the gradient hash, 
 /// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
-fn gradient_hash_impl(resized: &[u8], hash_size: u32, bitv: &mut BitVec) {
-    for row in resized.chunks(hash_size as usize) {
-        for idx in 1 .. row.len() {
-            // These two should never be out of bounds, so we can skip bounds checking.
-            let this = unsafe { row.get_unchecked(idx) };
-            let last = unsafe { row.get_unchecked(idx - 1) };
+fn gradient_hash_impl<I: ops::Index<usize, Output=u8> + ?Sized>(bytes: &I, len: u32, bitv: &mut BitVec) {
+    let len = len as usize;
 
-            bitv.push(last < this);
-        }
+    for i in 1 .. len {
+        let this = &bytes[i];
+        let last = &bytes[i - 1];
 
-        // Wrap the last comparison so we get `hash_size` total comparisons
-        let last = unsafe { row.get_unchecked(row.len() - 1) };
-        let first = unsafe { row.get_unchecked(0) };
-
-        bitv.push(last < first);
+        bitv.push(last < this);
     }
 }
 
 fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
-    let resized = img.to_hashable(hash_size);
+    // We have one extra pixel in width so we have `hash_size` comparisons per row.
+    let bytes = img.to_hashable(hash_size + 1, hash_size);
     let mut bitv = BitVec::with_capacity((hash_size * hash_size) as usize);
 
-    gradient_hash_impl(&resized, hash_size, &mut bitv); 
+    for row in bytes.chunks((hash_size + 1) as usize) {
+        gradient_hash_impl(row, hash_size, &mut bitv); 
+    }
 
     bitv
 }
 
 fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
-    let mut hash_values = img.to_hashable(hash_size);
+    // We have one extra pixel in each dimension so we have `hash_size` comparisons.
+    let rowstride = hash_size + 1;
+    let bytes = img.to_hashable(rowstride, rowstride);
     let mut bitv = BitVec::with_capacity((hash_size * hash_size * 2) as usize);
 
-    gradient_hash_impl(&hash_values, hash_size, &mut bitv);
+    
+    for row in bytes.chunks(rowstride as usize) { 
+        gradient_hash_impl(row, rowstride, &mut bitv);
+    }
 
-    // Swap rows and columns
-    swap_rows_columns_square(&mut hash_values, hash_size);
-    gradient_hash_impl(&hash_values, hash_size, &mut bitv);
+    for column in Columns::from_slice(&bytes, rowstride as usize) {
+        gradient_hash_impl(&column, hash_size, &mut bitv);
+    }
 
     bitv
 }
 
-// swap rows with columns
-fn swap_rows_columns_square(bytes: &mut [u8], side: u32) {
-    let side = side as usize;
-
-    assert!(bytes.len() == side * side);
-
-    for x in 0..side {
-        for y in 0..side {
-            bytes.swap(x + side * y, y + side * x);
-        }
-    }
-}
 /// A byte vector representing an 8-bit grayscale image.
 pub type LumaBytes = Vec<u8>;
 
@@ -386,10 +419,10 @@ pub type LumaBytes = Vec<u8>;
 /// Implement this for custom image types.
 pub trait HashImage {
     /// Apply a grayscale filter and drop the alpha channel (if present),
-    /// then resize the image to `size` by `size` (making it square).
+    /// then resize the image to `width` by `height` (not preserving aspect ratio).
     ///
     /// Returns a copy, leaving `self` unmodified.
-    fn to_hashable(&self, size: u32) -> LumaBytes;    
+    fn to_hashable(&self, width: u32, height: u32) -> LumaBytes;    
 }
 
 /// Crop the values off a 1D-packed 2D DCT
