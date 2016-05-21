@@ -222,6 +222,8 @@ pub enum HashType {
     ///
     /// Fastest, but inaccurate. Really only useful for finding duplicates.
     Mean,
+    /// Blockhash.io algorithm
+    Block,
     /// This algorithm compares each pixel in a row to its neighbor and registers changes in
     /// gradients (e.g. edges and color boundaries).
     ///
@@ -253,6 +255,7 @@ impl HashType {
 
         match self {
             Mean => mean_hash(img, hash_size),
+            Block => block::blockhash(img, hash_size),
             DCT => dct_hash(img, hash_size, DCT2DFunc(dct_2d)),
             Gradient => gradient_hash(img, hash_size),
             DoubleGradient => double_gradient_hash(img, hash_size),
@@ -265,6 +268,7 @@ impl HashType {
 
         match self {
             Mean => 1,
+            Block => 6,
             DCT => 2,
             Gradient => 3,
             DoubleGradient => 4,
@@ -281,6 +285,7 @@ impl HashType {
             3 => Gradient,
             4 => DoubleGradient,
             5 => UserDCT(DCT2DFunc(dct_2d)),
+            6 => Block,
             _ => panic!("Byte {:?} cannot be coerced to a `HashType`!", byte),
         }
     }
@@ -567,6 +572,7 @@ mod test {
         bench_hash! { bench_gradient_hash : HashType::Gradient }
         bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
         bench_hash! { bench_dct_hash : HashType::DCT }
+        bench_hash! { bench_block_hash: HashType::Block }
 
         #[bench]
         fn bench_dct_1d(b: &mut Bencher) {
