@@ -22,10 +22,6 @@ bench = []
 bit-vec = "*"
 rustc-serialize = "*"
 
-[dependencies.stream-dct]
-version = "*"
-features = ["cos-approx"]
-
 [dev-dependencies]
 rand = "*"
 image = "*"
