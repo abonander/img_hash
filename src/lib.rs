@@ -31,6 +31,8 @@
 // Silence feature warnings for test module.
 #![cfg_attr(all(test, feature = "bench"), feature(test))]
 
+extern crate algo;
+
 extern crate bit_vec;
 
 #[cfg(any(test, feature = "rust-image"))]

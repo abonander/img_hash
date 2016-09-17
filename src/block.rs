@@ -4,12 +4,11 @@
 
 use super::HashImage;
 
+use algo::select;
+
 use bit_vec::BitVec;
 
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::iter;
-use std::ops::Mul;
 
 const FLOAT_EQ_MARGIN: f64 = 0.001;
 
@@ -101,7 +100,8 @@ fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
     });
 
     
-    gen_hash!(I, f64, blocks, size, block_width, block_height, |l: f64, r: f64| l.abs_sub(r) < FLOAT_EQ_MARGIN)
+    gen_hash!(I, f64, blocks, size, block_width, block_height,
+        |l: f64, r: f64| (l - r).abs() < FLOAT_EQ_MARGIN)
 }
 
 fn blockhash_fast<I: HashImage>(img: &I, size: u32) -> BitVec {
@@ -143,9 +143,6 @@ fn next_multiple_of_4(x: u32) -> u32 {
     x + 3 & !3
 }
 
-fn get_median<T>(blocks: &[T]) -> T where T: PartialOrd + Copy {
-    let mut blocks: Vec<&T> = blocks.iter().collect();
-    blocks.sort_by(|l, r| l.partial_cmp(r).unwrap_or(Ordering::Less));
-    *blocks[blocks.len() / 2]
+fn get_median<T: PartialOrd + Copy>(data: &[T]) -> T {
+    *select::median_by(data, |l, r| l.partial_cmp(r).unwrap_or(Ordering::Less))
 }
-
