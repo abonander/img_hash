@@ -1,8 +1,7 @@
 use super::Columns;
 
-
 use std::f64::consts::{PI, SQRT_2};
-use std::ops::{Index, IndexMut, Range};
+use std::ops::{Index, IndexMut};
 
 struct ColumnsMut<'a, T: 'a> {
     data: &'a mut [T],
