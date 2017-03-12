@@ -22,7 +22,7 @@ Usage
 Add `img_hash` to your `Cargo.toml`:
 
     [dependencies.img_hash]
-    version = "1.1"
+    version = "2.0"
     # For interop with `image`:
     features = ["rust-image"]
     
