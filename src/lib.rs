@@ -227,7 +227,7 @@ pub enum HashType {
     ///
     /// Fast, but inaccurate. Really only useful for finding duplicates.
     Mean,
-    /// The [Blockhash.io](https://blockhash.io) algorithm.
+    /// The [Blockhash.io](http://blockhash.io) algorithm.
     ///
     /// Faster than `Mean` but also prone to more collisions and suitable only for finding
     /// duplicates.

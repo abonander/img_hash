@@ -8,7 +8,7 @@ A library for getting perceptual hash values of images.
 Thanks to Dr. Neal Krawetz for the outlines of the Mean (aHash), Gradient (dHash), and DCT (pHash) perceptual hash algorithms:  
 http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html (Accessed August 2014)
 
-Also provides an implementation of [the Blockhash.io algorithm](https://blockhash.io).
+Also provides an implementation of [the Blockhash.io algorithm](http://blockhash.io).
 
 With the `rust-image` feature, this crate can operate directly on buffers from the [PistonDevelopers/image][1] crate.
 
