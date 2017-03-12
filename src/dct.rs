@@ -65,11 +65,14 @@ thread_local! {
 /// Precompute the DCT matrix for a given hash size and memoize it in thread-local
 /// storage.
 ///
+///
 /// If a precomputed matrix was already stored, even of the same length, it will be overwritten.
 ///
 /// This can produce a significant runtime savings (an order of magnitude on the author's machine)
-/// when performing multiple hashing runs with the same hash, as compared to not performing this
-/// step.
+/// when performing multiple hashing runs with the same hash size, as compared to not performing
+/// this step.
+///
+/// **Note:** Only affects the built-in DCT hash (`HashType::DCT`).
 ///
 /// ## Note: Thread-Local
 /// Because this uses thread-local storage, this will need to be called on every thread
