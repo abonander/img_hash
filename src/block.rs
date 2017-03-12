@@ -4,11 +4,10 @@
 
 use super::HashImage;
 
-use algo::select;
-
 use bit_vec::BitVec;
 
 use std::cmp::Ordering;
+use std::mem;
 
 const FLOAT_EQ_MARGIN: f64 = 0.001;
 
@@ -144,5 +143,73 @@ fn next_multiple_of_4(x: u32) -> u32 {
 }
 
 fn get_median<T: PartialOrd + Copy>(data: &[T]) -> T {
-    *select::median_by(data, |l, r| l.partial_cmp(r).unwrap_or(Ordering::Less))
+    let mut scratch = data.to_owned();
+    let median = scratch.len() / 2;
+    *qselect_inplace(&mut scratch, median)
+}
+
+const SORT_THRESH: usize = 8;
+
+fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
+    let len = data.len();
+
+    assert!(k < len, "Called qselect_inplace with k = {} and data length: {}", k, len);
+
+    if len < SORT_THRESH {
+        data.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Less));
+        return &mut data[k];
+    }
+
+    let pivot_idx = partition(data);
+
+    if k == pivot_idx {
+        &mut data[pivot_idx]
+    } else if k < pivot_idx {
+        qselect_inplace(&mut data[..pivot_idx], k)
+    } else {
+        qselect_inplace(&mut data[pivot_idx + 1..], k - pivot_idx - 1)
+    }
+}
+
+fn partition<T: PartialOrd>(data: &mut [T]) -> usize {
+    let len = data.len();
+
+    let pivot_idx = {
+        let first = (&data[0], 0);
+        let mid = (&data[len / 2], len / 2);
+        let last = (&data[len - 1], len - 1);
+
+        median_of_3(&first, &mid, &last).1
+    };
+
+    data.swap(pivot_idx, len - 1);
+
+    let mut curr = 0;
+
+    for i in 0 .. len - 1 {
+        if &data[i] < &data[len - 1] {
+            data.swap(i, curr);
+            curr += 1;
+        }
+    }
+
+    data.swap(curr, len - 1);
+
+    curr
+}
+
+pub fn median_of_3<T: PartialOrd>(mut x: T, mut y: T, mut z: T) -> T {
+    if x > y {
+        mem::swap(&mut x, &mut y);
+    }
+
+    if x > z {
+        mem::swap(&mut x, &mut z);
+    }
+
+    if x > z {
+        mem::swap(&mut y, &mut z);
+    }
+
+    y
 }

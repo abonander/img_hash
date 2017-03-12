@@ -19,10 +19,8 @@ rust-image = ["image"]
 bench = []
 
 [dependencies]
-algo = { git = "https://github.com/aleksandrpak/algo" }
 bit-vec = "*"
 rustc-serialize = "*"
-
 
 [dev-dependencies]
 rand = "*"
