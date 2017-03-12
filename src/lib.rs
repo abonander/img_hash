@@ -28,6 +28,7 @@
 //! }
 //! ```
 //! [1]: https://github.com/PistonDevelopers/image
+#![deny(missing_docs)]
 // Silence feature warnings for test module.
 #![cfg_attr(all(test, feature = "bench"), feature(test))]
 
@@ -65,6 +66,7 @@ pub use dct::precompute_dct_matrix;
 pub struct ImageHash {
     /// The bits of the hash
     pub bitv: BitVec,
+    /// The type of the hash
     pub hash_type: HashType,
 }
 
@@ -418,19 +420,30 @@ fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
 ///
 /// Implement this for custom image types.
 pub trait HashImage {
+    /// The image type when converted to grayscale.
     type Grayscale: HashImage;
 
+    /// The dimensions of the image as (width, height).
     fn dimensions(&self) -> (u32, u32);
 
     /// Returns a copy, leaving `self` unmodified.
     fn resize(&self, width: u32, height: u32) -> Self;
 
+    /// Convert `self` to grayscale.
     fn grayscale(&self) -> Self::Grayscale;
 
+    /// Convert `self` to a byte-vector.
     fn to_bytes(self) -> Vec<u8>;
 
+    /// Get the number of pixel channels in the image:
+    ///
+    /// * 1 -> Grayscale
+    /// * 2 -> Grayscale with Alpha
+    /// * 3 -> RGB
+    /// * 4 -> RGB with Alpha
     fn channel_count() -> u8;
 
+    /// Call `iter_fn` for each pixel in the image, passing `(x, y, [pixel data])`.
     fn foreach_pixel<F>(&self, iter_fn: F) where F: FnMut(u32, u32, &[u8]);
 }
 
