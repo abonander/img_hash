@@ -72,13 +72,23 @@ thread_local! {
 /// when performing multiple hashing runs with the same hash size, as compared to not performing
 /// this step.
 ///
-/// **Note:** Only affects the built-in DCT hash (`HashType::DCT`).
+/// ## Note
+/// This only affects the built-in DCT hash (`HashType::DCT`). It also includes
+/// the hash size multiplier applied by the DCT hash algorithm.
 ///
 /// ## Note: Thread-Local
 /// Because this uses thread-local storage, this will need to be called on every thread
 /// that will be using the DCT hash for the runtime benefit. You can also
 /// have precomputed matrices of different sizes for each thread.
 pub fn precompute_dct_matrix(size: u32) {
+    // The DCT hash uses a hash size larger than the user provided, so we have to
+    // precompute a matrix of the right size
+    let size = size * ::DCT_HASH_SIZE_MULTIPLIER;
+    precomp_exact(size);
+}
+
+/// Precompute a DCT matrix of the exact given size.
+pub fn precomp_exact(size: u32) {
     PRECOMPUTED_MATRIX.with(|matrix| precompute_matrix(size as usize, &mut matrix.borrow_mut()));
 }
 

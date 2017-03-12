@@ -305,8 +305,10 @@ fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     hash_values.into_iter().map(|x| x as u32 >= mean).collect()
 }
 
+const DCT_HASH_SIZE_MULTIPLIER: u32 = 4;
+
 fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> BitVec {
-    let large_size = (hash_size * 4) as usize;
+    let large_size = (hash_size * DCT_HASH_SIZE_MULTIPLIER) as usize;
 
     // We take a bigger resize than fast_hash, 
     // then we only take the lowest corner of the DCT
@@ -569,10 +571,13 @@ mod test {
         
         use self::test::Bencher;
 
+        const BENCH_HASH_SIZE: u32 = 8;
+        const TEST_IMAGE_SIZE: u32 = 64;
+
         fn bench_hash(b: &mut Bencher, hash_type: HashType) {
-            let test_img = gen_test_img(64, 64);
+            let test_img = gen_test_img(TEST_IMAGE_SIZE, TEST_IMAGE_SIZE);
         
-            b.iter(|| ImageHash::hash(&test_img, 8, hash_type));    
+            b.iter(|| ImageHash::hash(&test_img, BENCH_HASH_SIZE, hash_type));
         }
 
         macro_rules! bench_hash {
@@ -587,8 +592,20 @@ mod test {
         bench_hash! { bench_mean_hash : HashType::Mean }
         bench_hash! { bench_gradient_hash : HashType::Gradient }
         bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
-        bench_hash! { bench_dct_hash : HashType::DCT }
         bench_hash! { bench_block_hash: HashType::Block }
+
+
+        #[bench]
+        fn bench_dct_hash(b: &mut Bencher) {
+            ::dct::clear_precomputed_matrix();
+            bench_hash(b, HashType::DCT);
+        }
+
+        #[bench]
+        fn bench_dct_hash_precomp(b: &mut Bencher) {
+            ::precompute_dct_matrix(BENCH_HASH_SIZE);
+            bench_hash(b, HashType::DCT);
+        }
 
         #[bench]
         fn bench_dct_1d(b: &mut Bencher) {
@@ -616,7 +633,7 @@ mod test {
 
             let mut output = [0f64;  ROW_LEN];
 
-            ::precompute_dct_matrix(ROW_LEN as u32);
+            ::dct::precomp_exact(ROW_LEN as u32);
 
             // Explicit slicing is necessary
             b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
@@ -647,7 +664,7 @@ mod test {
 
             fill_rand(&mut test_vals);
 
-            ::precompute_dct_matrix(ROWSTRIDE as u32);
+            ::dct::precomp_exact(ROWSTRIDE as u32);
 
             b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
         }
