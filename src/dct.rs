@@ -1,5 +1,6 @@
 use super::Columns;
 
+use std::cell::RefCell;
 use std::f64::consts::{PI, SQRT_2};
 use std::ops::{Index, IndexMut};
 
@@ -57,7 +58,61 @@ impl<'a, T: 'a> IndexMut<usize> for ColumnMut<'a, T> {
     }
 }
 
+thread_local! {
+    static PRECOMPUTED_MATRIX: RefCell<Vec<f64>> = RefCell::new(Vec::new());
+}
+
+/// Precompute the DCT matrix for a given hash size and memoize it in thread-local
+/// storage.
+///
+/// If a precomputed matrix was already stored, even of the same length, it will be overwritten.
+///
+/// This can produce a significant runtime savings (an order of magnitude on the author's machine)
+/// when performing multiple hashing runs with the same hash, as compared to not performing this
+/// step.
+///
+/// ## Note: Thread-Local
+/// Because this uses thread-local storage, this will need to be called on every thread
+/// that will be using the DCT hash for the runtime benefit. You can also
+/// have precomputed matrices of different sizes for each thread.
+pub fn precompute_dct_matrix(size: u32) {
+    PRECOMPUTED_MATRIX.with(|matrix| precompute_matrix(size as usize, &mut matrix.borrow_mut()));
+}
+
+#[cfg(feature = "bench")]
+pub fn clear_precomputed_matrix() {
+    PRECOMPUTED_MATRIX.with(|matrix| matrix.borrow_mut().clear());
+}
+
+fn precompute_matrix(size: usize, matrix: &mut Vec<f64>) {
+    matrix.resize(size * size, 0.0);
+
+    for i in 0 .. size {
+        for j in 0 .. size {
+            matrix[i * size + j] = (PI * i as f64 * (2 * j + 1) as f64 / (2 * size) as f64).cos();
+        }
+    }
+}
+
+fn with_precomputed_matrix<F>(size: usize, with_fn: F) -> bool
+where F: FnOnce(&[f64]) {
+    PRECOMPUTED_MATRIX.with(|matrix| {
+        let matrix = matrix.borrow();
+
+        if matrix.len() == size * size {
+            with_fn(&matrix);
+            true
+        } else {
+            false
+        }
+    })
+}
+
 pub fn dct_1d<I: Index<usize, Output=f64> + ?Sized, O: IndexMut<usize, Output=f64> + ?Sized>(input: &I, output: &mut O, len: usize) {
+    if with_precomputed_matrix(len, |matrix| dct_1d_precomputed(input, output, len, matrix)) {
+        return;
+    }
+
     for i in 0 .. len {        
         let mut z = 0.0;
 
@@ -74,6 +129,23 @@ pub fn dct_1d<I: Index<usize, Output=f64> + ?Sized, O: IndexMut<usize, Output=f6
 
         output[i] = z / 2.0;
     } 
+}
+
+fn dct_1d_precomputed<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, matrix: &[f64])
+where I: Index<usize, Output=f64>, O: IndexMut<usize, Output=f64> {
+    for i in 0 .. len {
+        let mut z = 0.0;
+
+        for j in 0 .. len {
+            z += input[j] * matrix[i * len + j];
+        }
+
+        if i == 0 {
+            z *= 1.0 / SQRT_2;
+        }
+
+        output[i] = z / 2.0;
+    }
 }
 
 /// Perform a 2D DCT on a 1D-packed vector with a given rowstride.

@@ -55,6 +55,8 @@ mod dct;
 
 mod block;
 
+pub use dct::precompute_dct_matrix;
+
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
@@ -154,6 +156,7 @@ impl ImageHash {
     }
 }
 
+/// The length of a row in a 2D matrix when packed into a 1D array.
 pub type Rowstride = usize;
 
 /// A 2-dimensional Discrete Cosine Transform function that receives 
@@ -583,9 +586,28 @@ mod test {
 
             let mut output = [0f64;  ROW_LEN];
 
+            ::dct::clear_precomputed_matrix();
+
             // Explicit slicing is necessary
             b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
         
+            test::black_box(&output);
+        }
+
+        #[bench]
+        fn bench_dct_1d_precomp(b: &mut Bencher) {
+            const ROW_LEN: usize = 8;
+            let mut test_vals = [0f64; ROW_LEN];
+
+            fill_rand(&mut test_vals);
+
+            let mut output = [0f64;  ROW_LEN];
+
+            ::precompute_dct_matrix(ROW_LEN as u32);
+
+            // Explicit slicing is necessary
+            b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
+
             test::black_box(&output);
         }
 
@@ -597,6 +619,22 @@ mod test {
             let mut test_vals = [0f64; LEN];
 
             fill_rand(&mut test_vals);
+
+            ::dct::clear_precomputed_matrix();
+
+            b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
+        }
+
+        #[bench]
+        fn bench_dct_2d_precomp(b: &mut Bencher) {
+            const ROWSTRIDE: usize = 8;
+            const LEN: usize = ROWSTRIDE * ROWSTRIDE;
+
+            let mut test_vals = [0f64; LEN];
+
+            fill_rand(&mut test_vals);
+
+            ::precompute_dct_matrix(ROWSTRIDE as u32);
 
             b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
         }
