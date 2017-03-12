@@ -225,9 +225,12 @@ pub enum HashType {
     /// This algorithm first averages the pixels of the reduced-size and color image,
     /// and then compares each pixel to the average.
     ///
-    /// Fastest, but inaccurate. Really only useful for finding duplicates.
+    /// Fast, but inaccurate. Really only useful for finding duplicates.
     Mean,
-    /// Blockhash.io algorithm
+    /// The [Blockhash.io](https://blockhash.io) algorithm.
+    ///
+    /// Faster than `Mean` but also prone to more collisions and suitable only for finding
+    /// duplicates.
     Block,
     /// This algorithm compares each pixel in a row to its neighbor and registers changes in
     /// gradients (e.g. edges and color boundaries).
@@ -243,6 +246,9 @@ pub enum HashType {
     /// then compares each datapoint in the transform to the average.
     ///
     /// Slowest by far, but can detect changes in color gamut and sometimes relatively significant edits.
+    ///
+    /// Call `precompute_dct_matrix()` with your chosen hash size to memoize the DCT matrix for the
+    /// given size, which can produce significant speedups in repeated hash runs.
     DCT,
     /// Equivalent to `DCT`, but allows the user to provide their own 2-dimensional DCT function. 
     /// See the `DCT2DFunc` docs for more info.
