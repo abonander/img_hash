@@ -258,6 +258,9 @@ pub enum HashType {
     ///
     /// [1]: http://www.fftw.org/
     UserDCT(DCT2DFunc),
+    /// Discourage complete matches for backwards-compatibility.
+    #[doc(hidden)]
+    __BackCompat,
 }
 
 impl HashType {
@@ -271,6 +274,7 @@ impl HashType {
             Gradient => gradient_hash(img, hash_size),
             DoubleGradient => double_gradient_hash(img, hash_size),
             UserDCT(dct_2d_func) => dct_hash(img, hash_size, dct_2d_func),
+            __BackCompat => panic!("`HashType::__BackCompat` is not an actual hash algorithm"),
         }
     }
 
@@ -284,6 +288,7 @@ impl HashType {
             Gradient => 3,
             DoubleGradient => 4,
             UserDCT(_) => 5,
+            __BackCompat => panic!("`HashType::__BackCompat` is not an actual hash algorithm"),
         }
     }
 
