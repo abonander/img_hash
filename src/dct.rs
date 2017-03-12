@@ -74,7 +74,8 @@ thread_local! {
 ///
 /// ## Note
 /// This only affects the built-in DCT hash (`HashType::DCT`). It also includes
-/// the hash size multiplier applied by the DCT hash algorithm.
+/// the hash size multiplier applied by the DCT hash algorithm, so just pass the same
+/// hash size that you would to `ImageHash::hash()`.
 ///
 /// ## Note: Thread-Local
 /// Because this uses thread-local storage, this will need to be called on every thread
