@@ -1,4 +1,4 @@
-img_hash [![Build Status](https://travis-ci.org/cybergeek94/img_hash.svg?branch=master)](https://travis-ci.org/cybergeek94/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
+img_hash [![Build Status](https://travis-ci.org/abonander/img_hash.svg?branch=master)](https://travis-ci.org/abonander/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
 ========
 
 ##### Now builds on stable Rust! (But needs nightly to bench.)
@@ -14,13 +14,13 @@ With the `rust-image` feature, this crate can operate directly on buffers from t
 
 Usage
 =====
-[Documentation on Rust-CI](http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/index.html)
+[Documentation](https://docs.rs/img_hash)
 
 
 Add `img_hash` to your `Cargo.toml`:
 
     [dependencies.img_hash]
-    git = "https://github.com/cybergeek94/img_hash"
+    version = "1.1"
     # For interop with `image`:
     features = ["rust-image"]
     
