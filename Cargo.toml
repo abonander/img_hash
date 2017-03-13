@@ -8,11 +8,11 @@ description = "A simple library that provides perceptual hashing and difference 
 
 license = "MIT"
 
-documentation = "http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/"
+documentation = "http://docs.rs/img_hash"
 
 keywords = ["image", "hash", "perceptual", "difference"]
 
-repository = "http://github.com/cybergeek94/img_hash"
+repository = "http://github.com/abonander/img_hash"
 
 [features]
 rust-image = ["image"]
