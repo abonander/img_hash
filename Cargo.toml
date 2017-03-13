@@ -1,18 +1,18 @@
 [package]
 
 name = "img_hash"
-version = "1.0.0"
+version = "2.0.0"
 authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
 
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
-documentation = "http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/"
+documentation = "http://docs.rs/img_hash"
 
 keywords = ["image", "hash", "perceptual", "difference"]
 
-repository = "http://github.com/cybergeek94/img_hash"
+repository = "http://github.com/abonander/img_hash"
 
 [features]
 rust-image = ["image"]
@@ -21,10 +21,6 @@ bench = []
 [dependencies]
 bit-vec = "*"
 rustc-serialize = "*"
-
-[dependencies.stream-dct]
-version = "*"
-features = ["cos-approx"]
 
 [dev-dependencies]
 rand = "*"

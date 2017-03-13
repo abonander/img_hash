@@ -1,4 +1,4 @@
-img_hash [![Build Status](https://travis-ci.org/cybergeek94/img_hash.svg?branch=master)](https://travis-ci.org/cybergeek94/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
+img_hash [![Build Status](https://travis-ci.org/abonander/img_hash.svg?branch=master)](https://travis-ci.org/abonander/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
 ========
 
 ##### Now builds on stable Rust! (But needs nightly to bench.)
@@ -8,19 +8,21 @@ A library for getting perceptual hash values of images.
 Thanks to Dr. Neal Krawetz for the outlines of the Mean (aHash), Gradient (dHash), and DCT (pHash) perceptual hash algorithms:  
 http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html (Accessed August 2014)
 
+Also provides an implementation of [the Blockhash.io algorithm](http://blockhash.io).
+
 With the `rust-image` feature, this crate can operate directly on buffers from the [PistonDevelopers/image][1] crate.
 
 [1]: https://github.com/PistonDevelopers/image 
 
 Usage
 =====
-[Documentation on Rust-CI](http://rust-ci.org/cybergeek94/img_hash/doc/img_hash/index.html)
+[Documentation](https://docs.rs/img_hash)
 
 
 Add `img_hash` to your `Cargo.toml`:
 
     [dependencies.img_hash]
-    git = "https://github.com/cybergeek94/img_hash"
+    version = "2.0"
     # For interop with `image`:
     features = ["rust-image"]
     
@@ -58,3 +60,18 @@ In order to build and test on Rust stable, the benchmarks have to be placed behi
 ```
 cargo bench --features bench
 ```
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.
