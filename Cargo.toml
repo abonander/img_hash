@@ -15,18 +15,19 @@ keywords = ["image", "hash", "perceptual", "difference"]
 repository = "http://github.com/abonander/img_hash"
 
 [features]
+default = ["rust-image"]
 rust-image = ["image"]
 bench = []
 
 [dependencies]
-bit-vec = "*"
-rustc-serialize = "*"
+bit-vec = "0.4"
+rustc-serialize = "0.3"
 
 [dev-dependencies]
-rand = "*"
-image = "*"
+rand = "0.3"
+image = ">=0.10, <=0.13"
 
 [dependencies.image]
-version = "*"
+version = ">=0.10, <=0.13"
 optional = true
 

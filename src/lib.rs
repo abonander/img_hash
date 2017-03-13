@@ -12,15 +12,15 @@
 //! ### Example
 //! Hash two images, then compute their percentage difference.
 //!
-//! ```ignore
+//! ```rust,no_run
 //! extern crate image;
 //! extern crate img_hash;
 //! 
 //! use img_hash::{ImageHash, HashType};
-//! 
+//!
 //! fn main() {
-//!     let image1 = image::open(&Path::new("image1.png")).unwrap();
-//!     let image2 = image::open(&Path::new("image2.png")).unwrap();
+//!     let image1 = image::open("image1.png").unwrap();
+//!     let image2 = image::open("image2.png").unwrap();
 //!     
 //!     // These two lines produce hashes with 64 bits (8 ** 2),
 //!     // using the Gradient hash, a good middle ground between 
