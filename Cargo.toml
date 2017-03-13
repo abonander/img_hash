@@ -6,7 +6,7 @@ authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
 
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 documentation = "http://docs.rs/img_hash"
 
