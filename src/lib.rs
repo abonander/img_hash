@@ -468,7 +468,7 @@ pub trait HashImage {
 }
 
 fn prepare_image<I: HashImage>(img: &I, width: u32, height: u32) -> Vec<u8> {
-    img.resize(width, height).grayscale().to_bytes()
+    img.grayscale().resize(width, height).to_bytes()
 }
 
 /// Crop the values off a 1D-packed 2D DCT
