@@ -30,4 +30,3 @@ image = ">=0.10, <=0.13"
 [dependencies.image]
 version = ">=0.10, <=0.13"
 optional = true
-

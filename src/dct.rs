@@ -5,68 +5,51 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::Columns;
 
 use std::cell::RefCell;
 use std::f64::consts::{PI, SQRT_2};
-use std::ops::{Index, IndexMut};
 
-struct ColumnsMut<'a, T: 'a> {
-    data: &'a mut [T],
-    rowstride: usize,
-    curr: usize,
-}
+use bit_vec::BitVec;
 
-impl<'a, T: 'a> ColumnsMut<'a, T> {
-    #[inline(always)]
-    fn from_slice(data: &'a mut [T], rowstride: usize) -> Self {
-        ColumnsMut {
-            data: data,
-            rowstride: rowstride,
-            curr: 0,
-        }
-    }
-}
+use columns::*;
 
-impl<'a, T: 'a> Iterator for ColumnsMut<'a, T> {
-    type Item = ColumnMut<'a, T>;
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.curr < self.rowstride {
-           let data = unsafe { &mut *(&mut self.data[self.curr..] as *mut [T]) };
-            self.curr += 1;
-            Some(ColumnMut {
-                data: data,
-                rowstride: self.rowstride,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-struct ColumnMut<'a, T: 'a> {
-    data: &'a mut [T],
-    rowstride: usize,
-}
-
-impl<'a, T: 'a> Index<usize> for ColumnMut<'a, T> {
-    type Output = T;
-    #[inline(always)]
-    fn index(&self, idx: usize) -> &T {
-       &self.data[idx * self.rowstride]
-    }
-}
-
-impl<'a, T: 'a> IndexMut<usize> for ColumnMut<'a, T> {
-    #[inline(always)]
-    fn index_mut(&mut self, idx: usize) -> &mut T {
-       &mut self.data[idx * self.rowstride]
-    }
-}
+use super::{DCT2DFunc, HashImage, prepare_image};
 
 thread_local! {
     static PRECOMPUTED_MATRIX: RefCell<Vec<f64>> = RefCell::new(Vec::new());
+}
+
+include!("generated/dct_header.rs");
+include!("generated/dct.rs");
+
+const HASH_SIZE_MULTIPLIER: u32 = 2;
+
+pub fn custom_dct_hash<I: HashImage>(img: &I, size: u32, func: DCT2DFunc) -> BitVec {
+    let large_size = size * HASH_SIZE_MULTIPLIER;
+
+    let hash_values: Vec<_> = prepare_image(img, large_size, large_size)
+        .into_iter().map(|val| (val as f64) / 255.0).collect();
+
+    let mut dct = func.call(&hash_values, large_size as usize);
+    crop_2d(&mut dct, size);
+
+    let mean = dct.iter().fold(0f64, |b, &a| a + b) / dct.len() as f64;
+
+    dct.into_iter().map(|x| x >= mean).collect()
+}
+
+fn dct_hash_dyn<I: HashImage>(img: &I, size: u32) -> BitVec {
+    let large_size = size * HASH_SIZE_MULTIPLIER;
+
+    let hash_values: Vec<_> = prepare_image(img, large_size, large_size)
+        .into_iter().map(|val| (val as f64) / 255.0).collect();
+
+    let mut dct = dct_2d(&hash_values, large_size as usize);
+    crop_2d(&mut dct, size);
+
+    let mean = dct.iter().fold(0f64, |b, &a| a + b) / dct.len() as f64;
+
+    dct.into_iter().map(|x| x >= mean).collect()
 }
 
 /// Precompute the DCT matrix for a given hash size and memoize it in thread-local
@@ -91,7 +74,7 @@ thread_local! {
 pub fn precompute_dct_matrix(size: u32) {
     // The DCT hash uses a hash size larger than the user provided, so we have to
     // precompute a matrix of the right size
-    let size = size * ::DCT_HASH_SIZE_MULTIPLIER;
+    let size = size * HASH_SIZE_MULTIPLIER;
     precomp_exact(size);
 }
 
@@ -129,36 +112,42 @@ where F: FnOnce(&[f64]) {
     })
 }
 
-pub fn dct_1d<I: Index<usize, Output=f64> + ?Sized, O: IndexMut<usize, Output=f64> + ?Sized>(input: &I, output: &mut O, len: usize) {
+pub fn dct_1d<I: IndexLen<Output=f64> + ?Sized, O: IndexMutLen<Output=f64> + ?Sized>(input: &I, output: &mut O, len: usize) {
     if with_precomputed_matrix(len, |matrix| dct_1d_precomputed(input, output, len, matrix)) {
         return;
     }
 
-    for i in 0 .. len {        
+    dct_1d_dyn(input, output, len);
+}
+
+fn dct_1d_precomputed<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, matrix: &[f64])
+where I: IndexLen<Output=f64>, O: IndexMutLen<Output=f64> {
+    for i in 0 .. len {
         let mut z = 0.0;
 
         for j in 0 .. len {
-            z += input[j] * (
-                PI * i as f64 * (2 * j + 1) as f64 
-                / (2 * len) as f64
-            ).cos();
-        } 
+            z += input[j] * matrix[i * len + j];
+        }
 
         if i == 0 {
             z *= 1.0 / SQRT_2;
         }
 
         output[i] = z / 2.0;
-    } 
+    }
 }
 
-fn dct_1d_precomputed<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, matrix: &[f64])
-where I: Index<usize, Output=f64>, O: IndexMut<usize, Output=f64> {
+#[inline(always)]
+fn dct_1d_dyn<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize)
+where I: IndexLen<Output = f64>, O: IndexMutLen<Output = f64> {
     for i in 0 .. len {
         let mut z = 0.0;
 
         for j in 0 .. len {
-            z += input[j] * matrix[i * len + j];
+            z += input[j] * (
+                PI * i as f64 * (2 * j + 1) as f64
+                    / (2 * len) as f64
+            ).cos();
         }
 
         if i == 0 {
@@ -182,9 +171,9 @@ pub fn dct_2d(packed_2d: &[f64], rowstride: usize) -> Vec<f64> {
 
     {
         let (col_pass, row_pass) = scratch.split_at_mut(packed_2d.len());
-    
+
         for (row_in, row_out) in packed_2d.chunks(rowstride)
-                .zip(row_pass.chunks_mut(rowstride)) {                
+                .zip(row_pass.chunks_mut(rowstride)) {
             dct_1d(row_in, row_out, rowstride);
         }
 
@@ -198,74 +187,15 @@ pub fn dct_2d(packed_2d: &[f64], rowstride: usize) -> Vec<f64> {
     scratch
 }
 
-/*
-#[cfg(feature = "simd")]
-mod dct_simd {
-    use simdty::f64x2;
+fn crop_2d(packed: &mut Vec<f64>, size: u32) {
+    let size = size as usize;
+    let large_size = size * (HASH_SIZE_MULTIPLIER as usize);
 
-    use std::f64::consts::{PI, SQRT_2};
-    
-    macro_rules! valx2 ( ($val:expr) => ( ::simdty::f64x2($val, $val) ) );
-
-    const PI: f64x2 = valx2!(PI);
-    const ONE_DIV_SQRT_2: f64x2 = valx2!(1 / SQRT_2);
-    const SQRT_2: f64x2 = valx2!(SQRT_2);
-
-    pub dct_rows(vals: &[Vec<f64>]) -> Vec<Vec<f64>> {
-        let mut out = Vec::with_capacity(vals.len());
-
-        for pair in vals.iter().chunks(2) {
-            if pair.len() == 2 {
-                let vals = pair[0].iter().cloned().zip(pair[1].iter().cloned())
-                    .map(f64x2)
-                    .collect();
-
-                dct_1dx2(vals);
-
-
-        
+    for i in 1 .. size {
+        for j in 0 .. size {
+            packed[i * size + j] = packed[i * large_size + j];
         }
     }
 
-    fn dct_1dx2(vec: Vec<f64x2>) -> Vec<f64x2> {
-        let mut out = Vec::with_capacity(vec.len());
-
-        for u in 0 .. vec.len() {
-            let mut z = valx2!(0.0);
-
-            for x in 0 .. vec.len() {
-                z += vec[x] * cos_approx(
-                    PI * valx2!(
-                        u as f64 * (2 * x + 1) as f64 
-                            / (2 * vec.len()) as f64
-                    )
-                );
-            }
-
-            if u == 0 {
-                z *= ONE_DIV_SQRT_2;
-            }
-
-            out.insert(u, z / valx2!(2.0));
-        }
-
-        out 
-    }
-
-    fn cos_approx(x2: f64x2) -> f64x2 {
-        #[inline(always)]
-        fn powi(val: f64x2, pow: i32) -> f64x2 {
-            unsafe { llvmint::powi_v2f64(val, pow) }
-        }
-
-        let x2 = powi(val, 2);
-        let x4 = powi(val, 4);
-        let x6 = powi(val, 6);
-        let x8 = powi(val, 8);
-
-        valx2!(1.0) - (x2 / valx2!(2.0)) + (x4 / valx2!(24.0)) 
-            - (x6 / valx2!(720.0)) + (x8 / valx2!(40320.0))
-    }
+    packed.truncate(size * size);
 }
-*/
-

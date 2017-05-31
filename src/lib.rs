@@ -52,16 +52,18 @@ pub use serialize::base64::FromBase64Error;
 
 use bit_vec::BitVec;
 
-use dct::dct_2d;
-
 use std::{fmt, hash, ops};
 
 #[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
 
+mod columns;
+
 mod dct;
 
 mod block;
+
+use columns::Columns;
 
 pub use dct::precompute_dct_matrix;
 
@@ -277,10 +279,10 @@ impl HashType {
         match self {
             Mean => mean_hash(img, hash_size),
             Block => block::blockhash(img, hash_size),
-            DCT => dct_hash(img, hash_size, DCT2DFunc(dct_2d)),
+            DCT => dct::dct_hash(img, hash_size),
             Gradient => gradient_hash(img, hash_size),
             DoubleGradient => double_gradient_hash(img, hash_size),
-            UserDCT(dct_2d_func) => dct_hash(img, hash_size, dct_2d_func),
+            UserDCT(dct_2d_func) => dct::custom_dct_hash(img, hash_size, dct_2d_func),
             __BackCompat => panic!("`HashType::__BackCompat` is not an actual hash algorithm"),
         }
     }
@@ -307,11 +309,15 @@ impl HashType {
             2 => DCT,
             3 => Gradient,
             4 => DoubleGradient,
-            5 => UserDCT(DCT2DFunc(dct_2d)),
+            5 => UserDCT(DCT2DFunc(no_op_dct_2d)),
             6 => Block,
             _ => panic!("Byte {:?} cannot be coerced to a `HashType`!", byte),
         }
     }
+}
+
+fn no_op_dct_2d(_: &[f64], _: Rowstride) -> Vec<f64> {
+    unreachable!()
 }
 
 fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
@@ -323,87 +329,11 @@ fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     hash_values.into_iter().map(|x| x as u32 >= mean).collect()
 }
 
-const DCT_HASH_SIZE_MULTIPLIER: u32 = 4;
-
-fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> BitVec {
-    let large_size = (hash_size * DCT_HASH_SIZE_MULTIPLIER) as usize;
-
-    // We take a bigger resize than fast_hash, 
-    // then we only take the lowest corner of the DCT
-    let hash_values: Vec<_> = prepare_image(img, large_size as u32, large_size as u32)
-        .into_iter().map(|val| (val as f64) / 255.0).collect();
-
-    let dct = dct_2d_func.call(&hash_values, large_size);
-
-    let original = (large_size, large_size);
-    let new = (hash_size as usize, hash_size as usize);
-
-    let cropped_dct = crop_2d_dct(&dct, original, new);
-
-    let mean = cropped_dct.iter().fold(0f64, |b, &a| a + b) 
-        / cropped_dct.len() as f64;
-
-    cropped_dct.into_iter().map(|x| x >= mean).collect()
-}
-
-struct Columns<'a, T: 'a> {
-    data: &'a [T],
-    rowstride: usize,
-    curr: usize,
-}
-
-impl<'a, T: 'a> Columns<'a, T> {
-    #[inline(always)]
-    fn from_slice(data: &'a [T], rowstride: usize) -> Self {
-        Columns {
-            data: data,
-            rowstride: rowstride,
-            curr: 0,
-        }
-    }
-}
-
-impl<'a, T: 'a> Iterator for Columns<'a, T> {
-    type Item = Column<'a, T>;
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.curr < self.rowstride {
-            let data = &self.data[self.curr..];
-            self.curr += 1;
-            Some(Column {
-                data: data,
-                rowstride: self.rowstride,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-struct Column<'a, T: 'a> {
-    data: &'a [T],
-    rowstride: usize,
-}
-
-impl<'a, T: 'a> ops::Index<usize> for Column<'a, T> {
-    type Output = T;
-    #[inline(always)]
-    fn index(&self, idx: usize) -> &T {
-       &self.data[idx * self.rowstride]
-    }
-}
-
 /// The guts of the gradient hash, 
 /// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
 fn gradient_hash_impl<I: ops::Index<usize, Output=u8> + ?Sized>(bytes: &I, len: u32, bitv: &mut BitVec) {
     let len = len as usize;
-
-    for i in 1 .. len {
-        let this = &bytes[i];
-        let last = &bytes[i - 1];
-
-        bitv.push(last < this);
-    }
+    bitv.extend((1 .. len).map(|i| bytes[i - 1] < bytes[i]))
 }
 
 fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
@@ -423,7 +353,6 @@ fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     let rowstride = hash_size + 1;
     let bytes = prepare_image(img, rowstride, rowstride);
     let mut bitv = BitVec::with_capacity((hash_size * hash_size * 2) as usize);
-
     
     for row in bytes.chunks(rowstride as usize) { 
         gradient_hash_impl(row, rowstride, &mut bitv);
@@ -469,24 +398,6 @@ pub trait HashImage {
 
 fn prepare_image<I: HashImage>(img: &I, width: u32, height: u32) -> Vec<u8> {
     img.grayscale().resize(width, height).to_bytes()
-}
-
-/// Crop the values off a 1D-packed 2D DCT
-fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) -> Vec<f64> {
-    let (orig_width, orig_height) = original;
-
-    assert!(packed.len() == orig_width * orig_height);
-
-    let (new_width, new_height) = new;
-
-    assert!(new_width < orig_width && new_height < orig_height);
-
-    (0 .. new_height).flat_map(|y| {
-        let start = y * orig_width;
-        let end = start + new_width;
-
-        packed[start .. end].iter().cloned()
-    }).collect()
 }
 
 #[cfg(test)]
