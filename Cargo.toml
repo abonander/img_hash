@@ -23,6 +23,10 @@ bench = []
 bit-vec = "0.4"
 rustc-serialize = "0.3"
 
+[dependencies.img_hash_derives]
+# git = "https://github.com/abonander/img_hash"
+path = "img_hash_derives/"
+
 [dev-dependencies]
 rand = "0.3"
 image = ">=0.10, <=0.13"
@@ -30,3 +34,6 @@ image = ">=0.10, <=0.13"
 [dependencies.image]
 version = ">=0.10, <=0.13"
 optional = true
+
+[profile.release]
+debug = true

@@ -46,6 +46,9 @@ extern crate image;
 
 extern crate rustc_serialize as serialize;
 
+#[macro_use]
+extern crate img_hash_derives;
+
 use serialize::base64::{ToBase64, FromBase64, STANDARD};
 // Needs to be fully qualified
 pub use serialize::base64::FromBase64Error;
