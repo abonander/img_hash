@@ -1,0 +1,11 @@
+[package]
+name = "img_hash_derives"
+version = "0.1.0"
+authors = ["Austin Bonander <austin.bonander@gmail.com>"]
+
+[lib]
+crate-type = ["proc-macro"]
+
+[dependencies]
+syn = "*"
+quote = "*"
