@@ -97,7 +97,7 @@ fn gen_dct_hash_fn(header: &DctFnHeader) -> Tokens {
 
             let mean = mean(&cropped);
 
-            cropped.iter().map(|x| x >= mean).collect()
+            cropped.iter().flat_map(|row| row).map(|&x| x >= mean).collect()
         }
     }
 }
@@ -128,6 +128,7 @@ fn gen_dct_rows_fn(size: usize) -> Tokens {
     let vals = (0 .. size).map(|idx| gen_dct_1d_val(idx, size));
 
     quote! {
+        #[inline(always)]
         fn dct_row(input: &[f32; #size]) -> [f32; #size] {
             [#(#vals),*]
         }
@@ -167,6 +168,7 @@ fn gen_dct_cols_fn(size: usize) -> Tokens {
     });
 
     quote! {
+        #[inline(always)]
         fn dct_cols(input: &[[f32; #size]; #size]) -> [[f32; #size]; #size] {
             [#(#rows),*]
         }
