@@ -411,7 +411,7 @@ mod test {
 
     use image::{Rgba, ImageBuffer};
 
-    use self::rand::{weak_rng, Rng};
+    use self::rand::{weak_rng, Rand, Rng};
 
     use super::{DCT2DFunc, HashType, ImageHash};
 
@@ -495,7 +495,7 @@ mod test {
     #[cfg(feature = "bench")]
     mod bench {
         use super::gen_test_img;
-        use super::rand::{thread_rng, Rng};
+        use super::rand::{thread_rng, Rand, Rng};
 
         extern crate test;
 
@@ -542,11 +542,11 @@ mod test {
         #[bench]
         fn bench_dct_1d(b: &mut Bencher) {
             const ROW_LEN: usize = 8;
-            let mut test_vals = [0f64; ROW_LEN];
+            let mut test_vals = [0f32; ROW_LEN];
 
             fill_rand(&mut test_vals);
 
-            let mut output = [0f64;  ROW_LEN];
+            let mut output = [0f32;  ROW_LEN];
 
             ::dct::clear_precomputed_matrix();
 
@@ -559,11 +559,11 @@ mod test {
         #[bench]
         fn bench_dct_1d_precomp(b: &mut Bencher) {
             const ROW_LEN: usize = 8;
-            let mut test_vals = [0f64; ROW_LEN];
+            let mut test_vals = [0f32; ROW_LEN];
 
             fill_rand(&mut test_vals);
 
-            let mut output = [0f64;  ROW_LEN];
+            let mut output = [0f32;  ROW_LEN];
 
             ::dct::precomp_exact(ROW_LEN as u32);
 
@@ -578,7 +578,7 @@ mod test {
             const ROWSTRIDE: usize = 8;
             const LEN: usize = ROWSTRIDE * ROWSTRIDE;
 
-            let mut test_vals = [0f64; LEN];
+            let mut test_vals = [0f32; LEN];
 
             fill_rand(&mut test_vals);
 
@@ -592,7 +592,7 @@ mod test {
             const ROWSTRIDE: usize = 8;
             const LEN: usize = ROWSTRIDE * ROWSTRIDE;
 
-            let mut test_vals = [0f64; LEN];
+            let mut test_vals = [0f32; LEN];
 
             fill_rand(&mut test_vals);
 
@@ -602,7 +602,7 @@ mod test {
         }
 
         #[inline(never)]
-        fn fill_rand(out: &mut [f64]) {
+        fn fill_rand<T: Rand>(out: &mut [T]) {
             let mut rng = thread_rng();
 
             for (val, out) in rng.gen_iter().zip(out) {

@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use std::cell::RefCell;
-use std::f64::consts::{PI, SQRT_2};
+use std::f32::consts::{PI, SQRT_2};
 
 use bit_vec::BitVec;
 
@@ -16,13 +16,21 @@ use columns::*;
 use super::{DCT2DFunc, HashImage, prepare_image};
 
 thread_local! {
-    static PRECOMPUTED_MATRIX: RefCell<Vec<f64>> = RefCell::new(Vec::new());
+    static PRECOMPUTED_MATRIX: RefCell<Vec<f32>> = RefCell::new(Vec::new());
 }
 
-include!("generated/dct_header.rs");
-include!("generated/dct.rs");
-
 const HASH_SIZE_MULTIPLIER: u32 = 2;
+
+trait DctHash {
+    fn dct_hash<I: HashImage>(img: &I, size: u32) -> BitVec;
+}
+
+#[derive(DctHash)]
+struct DctHashImpl;
+
+pub fn dct_hash<I: HashImage>(img: &I, size: u32) -> BitVec {
+    DctHashImpl::dct_hash(img, size)
+}
 
 pub fn custom_dct_hash<I: HashImage>(img: &I, size: u32, func: DCT2DFunc) -> BitVec {
     let large_size = size * HASH_SIZE_MULTIPLIER;
@@ -42,12 +50,12 @@ fn dct_hash_dyn<I: HashImage>(img: &I, size: u32) -> BitVec {
     let large_size = size * HASH_SIZE_MULTIPLIER;
 
     let hash_values: Vec<_> = prepare_image(img, large_size, large_size)
-        .into_iter().map(|val| (val as f64) / 255.0).collect();
+        .into_iter().map(|val| (val as f32) / 255.0).collect();
 
     let mut dct = dct_2d(&hash_values, large_size as usize);
     crop_2d(&mut dct, size);
 
-    let mean = dct.iter().fold(0f64, |b, &a| a + b) / dct.len() as f64;
+    let mean = dct.iter().fold(0.0, |b, &a| a + b) / dct.len() as f32;
 
     dct.into_iter().map(|x| x >= mean).collect()
 }
@@ -88,18 +96,18 @@ pub fn clear_precomputed_matrix() {
     PRECOMPUTED_MATRIX.with(|matrix| matrix.borrow_mut().clear());
 }
 
-fn precompute_matrix(size: usize, matrix: &mut Vec<f64>) {
+fn precompute_matrix(size: usize, matrix: &mut Vec<f32>) {
     matrix.resize(size * size, 0.0);
 
     for i in 0 .. size {
         for j in 0 .. size {
-            matrix[i * size + j] = (PI * i as f64 * (2 * j + 1) as f64 / (2 * size) as f64).cos();
+            matrix[i * size + j] = (PI * i as f32 * (2 * j + 1) as f32 / (2 * size) as f32).cos();
         }
     }
 }
 
 fn with_precomputed_matrix<F>(size: usize, with_fn: F) -> bool
-where F: FnOnce(&[f64]) {
+where F: FnOnce(&[f32]) {
     PRECOMPUTED_MATRIX.with(|matrix| {
         let matrix = matrix.borrow();
 
@@ -112,7 +120,7 @@ where F: FnOnce(&[f64]) {
     })
 }
 
-pub fn dct_1d<I: IndexLen<Output=f64> + ?Sized, O: IndexMutLen<Output=f64> + ?Sized>(input: &I, output: &mut O, len: usize) {
+pub fn dct_1d<I: IndexLen<Output=f32> + ?Sized, O: IndexMutLen<Output=f32> + ?Sized>(input: &I, output: &mut O, len: usize) {
     if with_precomputed_matrix(len, |matrix| dct_1d_precomputed(input, output, len, matrix)) {
         return;
     }
@@ -120,8 +128,8 @@ pub fn dct_1d<I: IndexLen<Output=f64> + ?Sized, O: IndexMutLen<Output=f64> + ?Si
     dct_1d_dyn(input, output, len);
 }
 
-fn dct_1d_precomputed<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, matrix: &[f64])
-where I: IndexLen<Output=f64>, O: IndexMutLen<Output=f64> {
+fn dct_1d_precomputed<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, matrix: &[f32])
+where I: IndexLen<Output=f32>, O: IndexMutLen<Output=f32> {
     for i in 0 .. len {
         let mut z = 0.0;
 
@@ -139,14 +147,14 @@ where I: IndexLen<Output=f64>, O: IndexMutLen<Output=f64> {
 
 #[inline(always)]
 fn dct_1d_dyn<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize)
-where I: IndexLen<Output = f64>, O: IndexMutLen<Output = f64> {
+where I: IndexLen<Output = f32>, O: IndexMutLen<Output = f32> {
     for i in 0 .. len {
         let mut z = 0.0;
 
         for j in 0 .. len {
             z += input[j] * (
-                PI * i as f64 * (2 * j + 1) as f64
-                    / (2 * len) as f64
+                PI * i as f32 * (2 * j + 1) as f32
+                    / (2 * len) as f32
             ).cos();
         }
 
@@ -163,7 +171,7 @@ where I: IndexLen<Output = f64>, O: IndexMutLen<Output = f64> {
 /// E.g. a vector of length 9 with a rowstride of 3 will be processed as a 3x3 matrix.
 ///
 /// Returns a vector of the same size packed in the same way.
-pub fn dct_2d(packed_2d: &[f64], rowstride: usize) -> Vec<f64> {
+pub fn dct_2d(packed_2d: &[f32], rowstride: usize) -> Vec<f32> {
     assert_eq!(packed_2d.len() % rowstride, 0);
 
     let mut scratch = Vec::with_capacity(packed_2d.len() * 2);
@@ -187,7 +195,7 @@ pub fn dct_2d(packed_2d: &[f64], rowstride: usize) -> Vec<f64> {
     scratch
 }
 
-fn crop_2d(packed: &mut Vec<f64>, size: u32) {
+fn crop_2d<T: Copy>(packed: &mut Vec<T>, size: u32) {
     let size = size as usize;
     let large_size = size * (HASH_SIZE_MULTIPLIER as usize);
 
