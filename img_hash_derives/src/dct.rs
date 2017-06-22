@@ -75,13 +75,11 @@ fn gen_dct_hash_fn(header: &DctFnHeader) -> Tokens {
     let large = size * SIZE_MULT;
 
     let dct2d = gen_dct_2d_fn(large);
-    let crop_fn = gen_crop_fn(size);
     let mean_fn = gen_mean_fn(size);
 
     quote! {
         fn #name<I: HashImage>(img: &I) -> BitVec {
             #dct2d
-            #crop_fn
             #mean_fn
 
             let mut hash_values = [[0f32; #large]; #large];
@@ -93,11 +91,11 @@ fn gen_dct_hash_fn(header: &DctFnHeader) -> Tokens {
             }
 
             let dct = dct_2d(&hash_values);
-            let cropped = crop_dct(&dct);
 
-            let mean = mean(&cropped);
+            let mean = mean_lower(&dct);
 
-            cropped.iter().flat_map(|row| row).map(|&x| x >= mean).collect()
+            dct.iter().take(#size).flat_map(|row| row.iter().take(#size))
+                .map(|&x| x >= mean).collect()
         }
     }
 }
@@ -203,23 +201,9 @@ fn dct_multiplier(i: usize, j: usize, size: usize) -> f32 {
     (PI * i as f32 * (2 * j + 1) as f32 / (2 * size) as f32).cos()
 }
 
-fn gen_crop_fn(size: usize) -> Tokens {
-    let large = size * SIZE_MULT;
-
-    let rows = (0 .. size).map(|row| {
-        let row = (0 .. size).map(|i| quote!{ input[#row][#i] });
-        quote! { [#(#row),*] }
-    });
-
-    quote! {
-        fn crop_dct(input: &[[f32; #large]; #large]) -> [[f32; #size]; #size] {
-            [#(#rows),*]
-        }
-    }
-}
-
 fn gen_mean_fn(size: usize) -> Tokens {
     let len = size * size;
+    let large = size * SIZE_MULT;
 
     let rows = (0 .. size).map(|row| {
         let row = (0 .. size).map(|i| quote!{ input[#row][#i] });
@@ -227,7 +211,7 @@ fn gen_mean_fn(size: usize) -> Tokens {
     });
 
     quote! {
-        fn mean(input: &[[f32; #size]; #size]) -> f32 {
+        fn mean_lower(input: &[[f32; #large]; #large]) -> f32 {
             (#(#rows)+*) / #len as f32
         }
     }
