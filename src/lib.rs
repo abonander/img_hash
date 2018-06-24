@@ -98,10 +98,10 @@ impl ImageHash {
     /// ###Panics
     /// If `self` and `other` have differing `bitv` lengths or `hash_type` values.
     pub fn dist(&self, other: &ImageHash) -> usize {
-        assert!(self.hash_type == other.hash_type,
+        assert_eq!(self.hash_type, other.hash_type,
                "Image hashes must use the same algorithm for proper comparison!");
-        assert!(self.bitv.len() == other.bitv.len(), 
-                "Image hashes must be the same length for proper comparison!");
+        assert_eq!(self.bitv.len(), other.bitv.len(),
+                   "Image hashes must be the same length for proper comparison!");
 
         self.bitv.iter().zip(other.bitv.iter())
             .filter(|&(left, right)| left != right).count()
@@ -475,7 +475,7 @@ fn prepare_image<I: HashImage>(img: &I, width: u32, height: u32) -> Vec<u8> {
 fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) -> Vec<f64> {
     let (orig_width, orig_height) = original;
 
-    assert!(packed.len() == orig_width * orig_height);
+    assert_eq!(packed.len(), orig_width * orig_height);
 
     let (new_width, new_height) = new;
 
@@ -512,14 +512,46 @@ mod test {
         ImageBuffer::from_raw(width, height, buf).unwrap()
     }
 
-    #[test]
-    fn hash_equality() {
-        let test_img = gen_test_img(1024, 1024);
-        let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
-        let hash2 = ImageHash::hash(&test_img, 32, HashType::Mean);
+    macro_rules! test_hash_equality {
+        ($fnname:ident, $size:expr, $type:ident) => {
+            #[test]
+            fn $fnname() {
+                // square, powers of two
+                test_hash_equality!(1024, 1024, $size, $type);
+                // rectangular, powers of two
+                test_hash_equality!(512, 256, $size, $type);
+                // odd size, square
+                test_hash_equality!(967, 967, $size, $type);
+                // odd size, rectangular
+                test_hash_equality!(967, 1023, $size, $type);
+            }
+        };
+        ($width:expr, $height:expr, $size:expr, $type:ident) => {{
+            let test_img = gen_test_img($width, $height);
+            let hash1 = ImageHash::hash(&test_img, $size, HashType::$type);
+            let hash2 = ImageHash::hash(&test_img, $size, HashType::$type);
+            assert_eq!(hash1, hash2);
+        }};
+    }
 
-        assert_eq!(hash1, hash2);
-    }   
+    macro_rules! test_hash_type {
+        ($type:ident, $modname:ident) => {
+            mod $modname {
+                use {HashType, ImageHash};
+                use super::*;
+
+                test_hash_equality!(hash_eq_8, 8, $type);
+                test_hash_equality!(hash_eq_16, 16, $type);
+                test_hash_equality!(hash_eq_32, 32, $type);
+            }
+        }
+    }
+
+    test_hash_type!(Mean, mean);
+    test_hash_type!(Block, blockhash);
+    test_hash_type!(Gradient, gradient);
+    test_hash_type!(DoubleGradient, dbl_gradient);
+    test_hash_type!(DCT, dct);
 
     #[test]
     fn dct_2d_equality() {
@@ -546,7 +578,7 @@ mod test {
         let dct1 = DCT2DFunc(dummy_dct);
         let dct2 = DCT2DFunc(dummy_dct_2);
 
-        assert!(dct1 != dct2);
+        assert_ne!(dct1, dct2);
     }
 
     #[test]
@@ -563,8 +595,6 @@ mod test {
 
         let base64_string = hash1.to_base64();
         let decoded_result = ImageHash::from_base64(&*base64_string);
-
-        assert!(decoded_result.is_ok());
 
         assert_eq!(decoded_result.unwrap(), hash1);
     }  
