@@ -464,6 +464,8 @@ pub trait HashImage {
     fn channel_count() -> u8;
 
     /// Call `iter_fn` for each pixel in the image, passing `(x, y, [pixel data])`.
+    ///
+    /// The iteration order is unspecified. Implementations should use whatever is optimum.
     fn foreach_pixel<F>(&self, iter_fn: F) where F: FnMut(u32, u32, &[u8]);
 }
 

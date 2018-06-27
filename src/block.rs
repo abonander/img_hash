@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2017 The `img_hash` Crate Developers
+// Copyright (c) 2015-2018 The `img_hash` Crate Developers
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 //
-// Implementation of block-hashing as described here:
-// https://github.com/commonsmachinery/blockhash-rfc/blob/master/main.md#process-of-identifier-assignment
-// Main site: blockhash.io
+// Implementation adapted from Python version:
+// https://github.com/commonsmachinery/blockhash-python/blob/e8b009d/blockhash.py
+// Main site: http://blockhash.io
 use super::HashImage;
 
 use bit_vec::BitVec;
@@ -74,35 +74,39 @@ fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
 
         let (x, y) = (x as f64, y as f64);
 
-        let block_x = (x / block_width).floor();
-        let block_y = (y / block_height).floor();
+        let block_x = x / block_width;
+        let block_y = y / block_height;
 
-        let div_x = block_x * block_width;
-        let div_y = block_y * block_height;
+        let x_mod = x + 1. % block_width;
+        let y_mod = y + 1. % block_height;
 
-        let horz_overlap = div_x - x < 1.0;
-        let vert_overlap = div_y - y < 1.0;
+        // terminology is mostly arbitrary as long as we're consistent
+        // if `x` evenly divides `block_height`, this weight will be 0
+        // so we don't double the sum as `block_top` will equal `block_bottom`
+        let weight_left = x_mod.fract();
+        let weight_right = 1. - weight_left;
+        let weight_top = y_mod.fract();
+        let weight_bottom = 1. - weight_top;
 
-        // quadrant I
-        let area_a = div_x - x * div_y - y;
-        // quad II
-        let area_b = (x + 1.0 - div_x) * div_y - y;
-        // quad III
-        let area_c = div_x - x * (y + 1.0 - div_y);
-        // quad IV
-        let area_d = (x + 1.0 - div_x) * (y + 1.0 - div_y);
+        let block_left = block_x.floor() as u32;
+        let block_top = block_y.floor() as u32;
 
-        let block_x = block_x as u32;
-        let block_y = block_y as u32;
+        let block_right = if x_mod.trunc() == 0. {
+            block_x.ceil() as u32
+        } else {
+            block_left
+        };
 
-        match (horz_overlap, vert_overlap) {
-            (true, true) => blocks[idx(block_x + 1, block_y +1)] += px_sum * area_d,
-            (true, _) => blocks[idx(block_x + 1, block_y)] += px_sum * area_b,
-            (_, true) => blocks[idx(block_x, block_y + 1)] += px_sum * area_c,
-            _ => (),
-        }
+        let block_bottom = if y_mod.trunc() == 0. {
+            block_y.ceil() as u32
+        } else {
+            block_top
+        };
 
-        blocks[idx(block_x, block_y)] += px_sum * area_a;
+        blocks[idx(block_left, block_top)] += px_sum * weight_left * weight_top;
+        blocks[idx(block_left, block_bottom)] += px_sum * weight_left * weight_bottom;
+        blocks[idx(block_right, block_top)] += px_sum * weight_right * weight_top;
+        blocks[idx(block_right, block_bottom)] += px_sum * weight_right * weight_bottom;
     });
 
     
