@@ -1,7 +1,7 @@
 [package]
 
 name = "img_hash"
-version = "2.0.2"
+version = "2.1.0"
 authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
@@ -25,9 +25,9 @@ rustc-serialize = "0.3"
 
 [dev-dependencies]
 rand = "0.3"
-image = ">=0.10, <=0.13"
+image = ">=0.10, <=0.19"
 
 [dependencies.image]
-version = ">=0.10, <=0.13"
+version = ">=0.10, <=0.19"
 optional = true
 
