@@ -68,8 +68,10 @@ pub trait HashBytes: AsMut<[u8]> {
     /// (the hash API will not create a hash larger than this type can contain).
     fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self;
 
-    /// Return `true` if this type can contain the given number of bytes.
-    fn check_size(size: usize) -> bool;
+    /// Return the maximum capacity of this type, in bytes.
+    ///
+    /// If this type has an arbitrary/theoretically infinite capacity, return `usize::MAX`.
+    fn max_size() -> usize;
 }
 
 impl HashBytes for Box<[u8]> {
@@ -77,8 +79,8 @@ impl HashBytes for Box<[u8]> {
         iter.collect()
     }
 
-    fn check_size(size: usize) -> bool {
-        true
+    fn max_size() -> usize {
+        usize::max_value()
     }
 }
 
@@ -87,8 +89,8 @@ impl HashBytes for Vec<u8> {
         iter.collect()
     }
 
-    fn check_size(size: usize) -> bool {
-        true
+    fn max_size() -> usize {
+        usize::max_value()
     }
 }
 
@@ -151,24 +153,61 @@ pub struct HasherConfig<B = Bytes8> {
     vectype: PhantomData<B>,
 }
 
-impl<B> HasherConfig<B> {
+impl<B: HashBytes> HasherConfig<B> {
     /// Construct a new hasher config with sane, reasonably fast defaults.
     ///
-    /// A default bitset type is baked into this struct
+    /// A default hash container type is provided as a default type parameter which is guaranteed
+    /// to exactly fit the default hash size.
     pub fn new() -> HasherConfig<B> {
 
     }
 
-    /// Set a new hash size
-    pub fn hash_size(self, hsize: u32) -> Self {
-
-
-        HasherConfig { hsize, ..self }
+    /// Set a new hash size, rounded to the next even integer.
+    ///
+    /// The number of bits in the resulting hash will be the square of this value.
+    /// The value is rounded to support the double-gradient hash which processes a half-size
+    /// sample twice, so it produces the same hash size.
+    ///
+    /// ### Panics
+    /// In the same cases that [`Self::try_hash_size()`](Self::try_hash_size) returns an error.
+    /// Prefer that method for robustness, this method for convenience.
+    pub fn hash_size(mut self, hash_size: u32) -> Self {
+        self.try_hash_size(hsize).expect("failed to set a hash size");
+        self
     }
 
-    /// Try to set a hash size.
-    pub fn try_hash_size(&mut self, hsize: u32) -> Result<(), &'static str> {
-        if hsize
+    /// Try to set a hash size, rounded to the next even integer.
+    ///
+    /// The number of bits in the resulting hash will be the square of this value.
+    /// The value is rounded to support the double-gradient hash which processes a half-size
+    /// sample twice, so it produces the same hash size.
+    ///
+    /// Returns `Err` with a human-readable error string if the hash size is too large,
+    /// which it might be in two cases:
+    ///
+    /// * if `B::max_size() * 8` (saturating) is less than `hash_size * hash_size`, or:
+    /// * if `hash_size * hash_size` overflows `usize`, or:
+    /// * if `hash_size + 1` (rounding up to the next even integer) overflows `u32`.
+    ///
+    /// Otherwise, `Ok(())`.
+    pub fn try_hash_size(&mut self, mut hash_size: u32) -> Result<(), String> {
+        // round up to the next even integer
+        hash_size = hash_size.checked_add(1).ok_or_else(
+            || format!("given hash size too big: overflow evaluating `{} + 1`", hash_size)
+        ) & !1;
+
+        let max_size_bits = B::max_size().saturating_mul(8);
+        let req_size_bits = (hash_size as usize).checked_mul(hash_size as usize).ok_or_else(
+            || format!("given hash size too big: overflow evaluating `{0} * {0}`", hash_size)
+        )?;
+
+        if req_size_bits > max_size_bits {
+            Err(format!("square of hash size cannot be more than {}, was actually {}",
+                        max_size_bits, req_size_bits))
+        } else {
+            self.hsize = hash_size;
+            Ok(())
+        }
 
     }
 
