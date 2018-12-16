@@ -164,7 +164,7 @@ impl<B: HashBytes> HasherConfig<B> {
 
     /// Set a new hash size, rounded to the next even integer.
     ///
-    /// The number of bits in the resulting hash will be the square of this value.
+    /// The number of bits in the resulting hash will be the square of this rounded value.
     /// The value is rounded to support the double-gradient hash which processes a half-size
     /// sample twice, so it produces the same hash size.
     ///
@@ -178,7 +178,7 @@ impl<B: HashBytes> HasherConfig<B> {
 
     /// Try to set a hash size, rounded to the next even integer.
     ///
-    /// The number of bits in the resulting hash will be the square of this value.
+    /// The number of bits in the resulting hash will be the square of this rounded value.
     /// The value is rounded to support the double-gradient hash which processes a half-size
     /// sample twice, so it produces the same hash size.
     ///
