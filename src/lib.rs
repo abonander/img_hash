@@ -39,45 +39,172 @@
 // Silence feature warnings for test module.
 #![cfg_attr(all(test, feature = "bench"), feature(test))]
 
-extern crate bit_vec;
-
-#[cfg(any(test, feature = "rust-image"))]
 extern crate image;
-
-extern crate rustc_serialize as serialize;
-
-use serialize::base64::{ToBase64, FromBase64, STANDARD};
-// Needs to be fully qualified
-pub use serialize::base64::FromBase64Error;
-
-use bit_vec::BitVec;
 
 use dct::dct_2d;
 
-use std::{fmt, hash, ops};
+use std::{fmt, hash, ops, slice};
 
-#[cfg(any(test, feature = "rust-image"))]
 mod rust_image;
 
 mod dct;
 
 mod block;
 
+use std::marker::PhantomData;
+
 pub use dct::precompute_dct_matrix;
+
+pub type Bytes8 = [u8; 8];
+
+/// Interface for types used for storing hash data.
+///
+/// This is implemented for `Vec<u8>`, `Box<[u8]>` and arrays that are multiples/combinations of
+/// common SIMD register widths (64, 128, 256, 512 bits).
+pub trait HashBytes: AsMut<[u8]> {
+    /// Construct this type from an iterator of bytes.
+    ///
+    /// If this type has a finite capacity (i.e. an array) then it can ignore extra data
+    /// (the hash API will not create a hash larger than this type can contain).
+    fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self;
+
+    /// Return `true` if this type can contain the given number of bytes.
+    fn check_size(size: usize) -> bool;
+}
+
+impl HashBytes for Box<[u8]> {
+    fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self {
+        iter.collect()
+    }
+
+    fn check_size(size: usize) -> bool {
+        true
+    }
+}
+
+impl HashBytes for Vec<u8> {
+    fn from_iter<I: Iterator<Item=u8>>(iter: I) -> Self {
+        iter.collect()
+    }
+
+    fn check_size(size: usize) -> bool {
+        true
+    }
+}
+
+macro_rules! hash_bytes_array {
+    ($n:expr) => {
+        impl HashBytes for [u8; $n] {
+            fn from_iter<I: Iterator<Item=u8>>(mut iter: I) -> Self {
+                // optimizer should eliminate this zeroing
+                let mut out = Self::default();
+
+                for (src, dest) in iter.by_ref().zip(out.as_mut()) {
+                    *dest = src;
+                }
+
+                out
+            }
+
+            fn check_size(size: usize) -> bool {
+                size <= n
+            }
+        }
+    };
+    ($($n:expr),+) => {
+        hash_bytes_array!($n);
+    }
+}
+
+hash_bytes_array!(8, 16, 24, 32, 40, 48, 56, 64);
+
+trait BitSet: HashBytes {
+    fn from_bools<I: Iterator<Item = bool>>(mut iter: I) -> Self {
+        let mut out = Self::default();
+
+        for mut dest in out.as_mut() {
+            *dest = iter.by_ref().take(8).fold(0u8, |accum, val| (accum << 1) | (val as u8));
+        }
+
+        out
+    }
+
+    fn xor(&self, other: &Self) -> Self {
+        Self::from_iter(self.iter().zip(other.iter()).map(|(l, r)| l ^ r))
+    }
+
+    fn popcnt(&self) -> u32 {
+        self.iter().map(|byte| byte.count_ones()).sum()
+    }
+
+    fn iter(&self) -> slice::Iter<u8> {
+        self.as_ref().iter()
+    }
+}
+
+impl<T: HashBytes> BitSet for T {}
+
+pub struct HasherConfig<B = Bytes8> {
+    hsize: u32,
+    gauss: bool,
+    dct: bool,
+    vectype: PhantomData<B>,
+}
+
+impl<B> HasherConfig<B> {
+    /// Construct a new hasher config with sane, reasonably fast defaults.
+    ///
+    /// A default bitset type is baked into this struct
+    pub fn new() -> HasherConfig<B> {
+
+    }
+
+    /// Set a new hash size
+    pub fn hash_size(self, hsize: u32) -> Self {
+
+
+        HasherConfig { hsize, ..self }
+    }
+
+    /// Try to set a hash size.
+    pub fn try_hash_size(&mut self, hsize: u32) -> Result<(), &'static str> {
+        if hsize
+
+    }
+
+    /// Enable Discrete Cosine Transform (DCT) preprocessing.
+    ///
+    /// DCT preprocessing can improve
+    pub fn preprocess_dct(self) -> Self {
+
+    }
+
+    pub fn into_hasher(self) -> Hasher<B> {
+
+    }
+}
+
+pub struct Hasher<B = Bytes8> {
+    config: HasherConfig<B>,
+    dct_matrix: Option<Box<[f32]>>,
+}
+
+impl<B> Hasher<B> where B: HashBytes {
+    pub fn hash_image<I>(&self, img: &I) -> ImageHash<B> where I: HashImage {
+
+    }
+}
 
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
 /// Get an instance with `ImageHash::hash()`.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
-pub struct ImageHash {
-    /// The bits of the hash
-    pub bitv: BitVec,
-    /// The type of the hash
-    pub hash_type: HashType,
+pub struct ImageHash<B> {
+    hash: B
 }
 
-impl ImageHash {
+impl ImageHash<B> {
     /// Create a hash of `img` with a length of `hash_size * hash_size`
     /// (`* 2` when using `HashType::DoubleGradient`)
     /// using the hash algorithm described by `hash_type`.
@@ -148,7 +275,7 @@ impl ImageHash {
         let hash_type = HashType::from_byte(data.remove(0));
 
         Ok(ImageHash{
-            bitv: BitVec::from_bytes(&*data),
+            bitv: HashBytes::from_bytes(&*data),
             hash_type: hash_type,
         })
     }
@@ -271,7 +398,7 @@ pub enum HashType {
 }
 
 impl HashType {
-    fn hash<I: HashImage>(self, img: &I, hash_size: u32) -> BitVec {
+    fn hash<I: HashImage>(self, img: &I, hash_size: u32) -> HashBytes {
         use HashType::*; 
 
         match self {
@@ -314,7 +441,7 @@ impl HashType {
     }
 }
 
-fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
+fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> HashBytes {
     let hash_values = prepare_image(img, hash_size, hash_size);
 
     let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) 
@@ -325,7 +452,7 @@ fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
 
 const DCT_HASH_SIZE_MULTIPLIER: u32 = 4;
 
-fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> BitVec {
+fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> HashBytes {
     let large_size = (hash_size * DCT_HASH_SIZE_MULTIPLIER) as usize;
 
     // We take a bigger resize than fast_hash, 
@@ -395,7 +522,7 @@ impl<'a, T: 'a> ops::Index<usize> for Column<'a, T> {
 
 /// The guts of the gradient hash, 
 /// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
-fn gradient_hash_impl<I: ops::Index<usize, Output=u8> + ?Sized>(bytes: &I, len: u32, bitv: &mut BitVec) {
+fn gradient_hash_impl<I: ops::Index<usize, Output=u8> + ?Sized>(bytes: &I, len: u32, bitv: &mut HashBytes) {
     let len = len as usize;
 
     for i in 1 .. len {
@@ -406,10 +533,10 @@ fn gradient_hash_impl<I: ops::Index<usize, Output=u8> + ?Sized>(bytes: &I, len: 
     }
 }
 
-fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
+fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> HashBytes {
     // We have one extra pixel in width so we have `hash_size` comparisons per row.
     let bytes = prepare_image(img, hash_size + 1, hash_size);
-    let mut bitv = BitVec::with_capacity((hash_size * hash_size) as usize);
+    let mut bitv = HashBytes::with_capacity((hash_size * hash_size) as usize);
 
     for row in bytes.chunks((hash_size + 1) as usize) {
         gradient_hash_impl(row, hash_size, &mut bitv); 
@@ -418,11 +545,11 @@ fn gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     bitv
 }
 
-fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
+fn double_gradient_hash<I: HashImage>(img: &I, hash_size: u32) -> HashBytes {
     // We have one extra pixel in each dimension so we have `hash_size` comparisons.
     let rowstride = hash_size + 1;
     let bytes = prepare_image(img, rowstride, rowstride);
-    let mut bitv = BitVec::with_capacity((hash_size * hash_size * 2) as usize);
+    let mut bitv = HashBytes::with_capacity((hash_size * hash_size * 2) as usize);
 
     
     for row in bytes.chunks(rowstride as usize) { 
