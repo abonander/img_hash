@@ -199,7 +199,8 @@ impl<B: HashBytes> HasherConfig<B> {
     pub fn hash_size(self, hash_size: u32) -> Self {
         let max_hash_bits = B::max_size().saturating_mul(8);
 
-        let plus_one = (hash_size as usize).expect("oveflowed usize evaluating `hash_size + 1`");
+        let plus_one = (hash_size as usize).checked_add(1)
+            .expect("oveflowed usize evaluating `hash_size + 1`");
         let req_hash_bits = (plus_one).checked_mul(plus_one)
             .expect("overflowed usize evaluating `(hash_size + 1) * (hash_size + 1)`");
 
