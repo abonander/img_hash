@@ -39,11 +39,15 @@
 // Silence feature warnings for test module.
 #![cfg_attr(all(test, feature = "bench"), feature(test))]
 
+// anti-footgun should this ever be compiled on a 16-bit platform
+#[target_pointer_width="16"]
+compile_error!("img_hash does not support 16-bit targets");
+
 extern crate image;
 
 use dct::dct_2d;
 
-use std::{fmt, hash, ops, slice};
+use std::{cmp, fmt, hash, mem, ops, slice};
 
 mod rust_image;
 
@@ -52,8 +56,6 @@ mod dct;
 mod block;
 
 use std::marker::PhantomData;
-
-pub use dct::precompute_dct_matrix;
 
 pub type Bytes8 = [u8; 8];
 
@@ -155,7 +157,7 @@ enum HashAlg {
 }
 
 pub struct HasherConfig<B = Bytes8> {
-    hsize: u32,
+    hash_size: u32,
     gauss_sigmas: Option<[f32; 2]>,
     dct: bool,
     algo: HashAlg,
@@ -169,8 +171,8 @@ impl<B: HashBytes> HasherConfig<B> {
     /// to exactly fit the default hash size.
     pub fn new() -> HasherConfig<B> {
         Self {
-            hsize: 8,
-            gauss: false,
+            hash_size: 8,
+            gauss_sigmas: None,
             dct: false,
             algo: HashAlg::DoubleGradient,
             vectype: PhantomData,
@@ -185,46 +187,25 @@ impl<B: HashBytes> HasherConfig<B> {
     /// sample twice, so it produces the same hash size.
     ///
     /// ### Panics
-    /// In the same cases that [`Self::try_hash_size()`](Self::try_hash_size) returns an error.
-    /// Prefer that method for robustness, this method for convenience.
-    pub fn hash_size(mut self, hash_size: u32) -> Self {
-        self.try_hash_size(hsize).expect("failed to set a hash size");
-        self
-    }
-
-    /// Try to set a hash size, rounded to the next even integer.
+    /// If `(hash_size + 1) * (hash_size + 1)` overflows `usize` or
+    /// exceeds `B::max_size() * 8` (saturating).
     ///
-    /// The number of bits in the resulting hash will be the square of this rounded value.
-    /// The value is rounded to support the double-gradient hash which processes a half-size
-    /// sample twice, so it produces the same hash size.
+    /// ### Recommended Values
+    /// As `hash_size` is squared for all algorithms, a very small value is usually sufficient;
+    /// see the source of [`Self::new()`](Self::new) for the default.
     ///
-    /// Returns `Err` with a human-readable error string if the hash size is too large,
-    /// which it might be in two cases:
-    ///
-    /// * if `B::max_size() * 8` (saturating) is less than `hash_size * hash_size`, or:
-    /// * if `hash_size * hash_size` overflows `usize`, or:
-    /// * if `hash_size + 1` (rounding up to the next even integer) overflows `u32`.
-    ///
-    /// Otherwise, `Ok(())`.
-    pub fn try_hash_size(&mut self, mut hash_size: u32) -> Result<(), String> {
-        // round up to the next even integer
-        hash_size = hash_size.checked_add(1).ok_or_else(
-            || format!("given hash size too big: overflow evaluating `{} + 1`", hash_size)
-        ) & !1;
+    /// If you are accepting user input for this configuration, you may prefer to clamp this value
+    /// to below 64 for performance reasons.
+    pub fn hash_size(self, hash_size: u32) -> Self {
+        let max_hash_bits = B::max_size().saturating_mul(8);
 
-        let max_size_bits = B::max_size().saturating_mul(8);
-        let req_size_bits = (hash_size as usize).checked_mul(hash_size as usize).ok_or_else(
-            || format!("given hash size too big: overflow evaluating `{0} * {0}`", hash_size)
-        )?;
+        let plus_one = (hash_size as usize).expect("oveflowed usize evaluating `hash_size + 1`");
+        let req_hash_bits = (plus_one).checked_mul(plus_one)
+            .expect("overflowed usize evaluating `(hash_size + 1) * (hash_size + 1)`");
 
-        if req_size_bits > max_size_bits {
-            Err(format!("square of hash size cannot be more than {}, was actually {}",
-                        max_size_bits, req_size_bits))
-        } else {
-            self.hsize = hash_size;
-            Ok(())
-        }
+        assert!(req_hash_bits <= max_hash_bits, "`hash_size` too large: {}", hash_size);
 
+        Self { hash_size, ..self  }
     }
 
     /// Enable preprocessing with the Discrete Cosine Transform (DCT).
@@ -242,8 +223,10 @@ impl<B: HashBytes> HasherConfig<B> {
     ///
     /// In layman's terms, this essentially converts the image into a mathematical representation
     /// of the "broad strokes" of the data, which allows the subsequent hashing step to ignore
-    /// changes that may otherwise produce different hashes, such as changes in hue,
-    /// aspect ratio and even somewhat significant edits.
+    /// changes that may otherwise produce different hashes, such as significant edits to portions
+    /// of the image (recoloring, additions, deletions).
+    ///
+    /// However, on most machines this usually adds an additional 50-100% to the average hash time.
     ///
     /// This is a very similar process to JPEG compression, although the implementation is too
     /// different for this to be optimized specifically for JPEG encoded images.
@@ -289,22 +272,60 @@ impl<B: HashBytes> HasherConfig<B> {
     /// the mean pixel value is taken, and then the hash bits are generated by comparing
     /// the pixels of the descaled image to the mean.
     ///
-    /// Further Reading: http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html
-    pub fn hash_algo_mean(self) -> Self {
+    /// This is the most basic hash algorithm supported, resistant only to changes in
+    /// resolution, aspect ratio, and overall brightness.
+    ///
+    /// Further Reading:
+    /// http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html
+    pub fn hash_alg_mean(self) -> Self {
        Self { algo: HashAlg::Mean, ..self }
     }
 
-    /// Use the Gradi
+    /// Use the Gradient hashing algorithm.
+    ///
+    /// The image is converted to grayscale, scaled down to `hash_size + 1 x hash_size`,
+    /// and then in row-major order the pixels are compared with each other, setting bits
+    /// in the hash for each comparison. The extra pixel is needed to have `hash_size` comparisons
+    /// per row.
+    ///
+    /// This hash algorithm is as fast or faster than Mean (because it only traverses the
+    /// hash data once) and is more resistant to changes than Mean.
+    ///
+    /// Further Reading:
+    /// http://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
+    pub fn hash_alg_gradient(self) -> Self {
+        Self { algo: HashAlg::Gradient, ..self }
+    }
 
+    /// Use the Double-Gradiant hashing algorithm.
+    ///
+    /// An advanced version of [`Self::hash_alg_gradient()`](Self::hash_alg_gradient);
+    /// resizes the grayscaled image to `hash_size / 2 + 1 * hash_size / 2 + 1` and compares columns
+    /// in addition to rows.
+    ///
+    /// This algorithm is slightly slower than `hash_alg_gradient()` (resizing the image dwarfs
+    /// the hash time in most cases) but the extra comparison direction may improve results (though
+    /// you might want to consider increasing `hash_size` to accommodate the extra comparisons).
+    pub fn hash_alg_dbl_gradient(self) -> Self {
 
+    }
+
+    /// Create a [`Hasher`](Hasher) from this config.
+    ///
+    /// If DCT preprocessing was selected, this will precalculate the DCT coefficients for the
+    /// chosen hash size.
     pub fn into_hasher(self) -> Hasher<B> {
+        let coeffs = if self.dct {
+            Some(dct::precompute_coeff(self.hash_size))
+        }
+
 
     }
 }
 
 pub struct Hasher<B = Bytes8> {
     config: HasherConfig<B>,
-    dct_matrix: Option<Box<[f32]>>,
+    dct_coeffs: Option<Box<[f32]>>,
 }
 
 impl<B> Hasher<B> where B: HashBytes {
