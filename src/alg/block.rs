@@ -18,6 +18,10 @@ use std::mem;
 
 const FLOAT_EQ_MARGIN: f64 = 0.001;
 
+pub struct Blockhash;
+
+impl
+
 pub fn blockhash<I: HashImage>(img: &I, size: u32) -> BitVec {
     let size = next_multiple_of_4(size);
     let (width, height) = img.dimensions(); 
