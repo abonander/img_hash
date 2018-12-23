@@ -9,25 +9,21 @@
 // Implementation adapted from Python version:
 // https://github.com/commonsmachinery/blockhash-python/blob/e8b009d/blockhash.py
 // Main site: http://blockhash.io
-use super::HashImage;
-
-use bit_vec::BitVec;
+use Image;
 
 use std::cmp::Ordering;
 use std::mem;
 
-const FLOAT_EQ_MARGIN: f64 = 0.001;
+const FLOAT_EQ_MARGIN: f32 = 0.001;
 
-pub struct Blockhash;
+pub fn blockhash<I: HashImage>(img: &I, width: u32, height: u32) -> BitVec {
+    assert_eq!(width % 4 == 0, "width must be multiple of 4");
+    assert_eq!(height % 4 == 0, "height must be multiple of 4");
 
-impl
-
-pub fn blockhash<I: HashImage>(img: &I, size: u32) -> BitVec {
-    let size = next_multiple_of_4(size);
-    let (width, height) = img.dimensions(); 
+    let (iwidth, iheight) = img.dimensions();
 
     // Skip the floating point math if it's unnecessary
-    if width % size == 0 && height % size == 0 {
+    if iwidth % width == 0 && iheight % height == 0 {
         blockhash_fast(img, size)
     } else {
         blockhash_slow(img, size)

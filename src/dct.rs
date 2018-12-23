@@ -11,6 +11,8 @@ use std::cell::RefCell;
 use std::f32::consts::{PI, SQRT_2};
 use std::ops::{Index, IndexMut};
 
+pub const SIZE_MULTIPLIER: u32 = 2;
+
 struct ColumnsMut<'a, T: 'a> {
     data: &'a mut [T],
     rowstride: usize,
@@ -65,17 +67,45 @@ impl<'a, T: 'a> IndexMut<usize> for ColumnMut<'a, T> {
     }
 }
 
+pub enum Coefficients {
+    Square(Box<[f32]>),
+    // a concatenation of the width coefficients and height coefficients
+    Rect(Box<[f32]>)
+}
+
+impl Coefficients {
+    pub fn precompute(width: u32, height: u32) -> Self {
+        if width == height {
+            Coefficients::Square(precompute_coeff(width).collect())
+        } else {
+            Coefficients::Rect(precompute_coeff(width).chain(precompute_coeff(height)).collect())
+        }
+    }
+
+    pub fn row(&self, rowstride: usize) -> &[f32] {
+        match *self {
+            Coefficients::Square(ref square) => square,
+            Coefficients::Rect(ref rect) => &rect[..rowstride],
+        }
+    }
+
+    pub fn column(&self, rowstride: usize) -> &[f32] {
+        match *self {
+            Coefficients::Square(ref square) => square,
+            Coefficients::Rect(ref rect) => &rect[rowstride..],
+        }
+    }
+}
+
 /// Precompute the 1D DCT coefficients for a given hash size.
-pub fn precompute_coeff(size: u32) -> Box<[f32]> {
+fn precompute_coeff(size: u32) -> impl Iterator<Item=f32> {
     // The DCT hash uses a hash size larger than the user provided, so we have to
     // precompute a matrix of the right size
-    let size = size * ::DCT_HASH_SIZE_MULTIPLIER;
-
-    matrix.resize(size * size, 0.0);
+    let size =  size * SIZE_MULTIPLIER;
 
     (0 .. size).flat_map(|i|
         (0 .. size).map(move |j| (PI * i as f32 * (2 * j + 1) as f32 / (2 * size) as f32).cos())
-    ).collect()
+    )
 }
 
 fn dct_1d<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, coeff: &[f32])
@@ -100,7 +130,7 @@ where I: Index<usize, Output=f32>, O: IndexMut<usize, Output=f32> {
 /// E.g. a vector of length 9 with a rowstride of 3 will be processed as a 3x3 matrix.
 ///
 /// Returns a vector of the same size packed in the same way.
-pub fn dct_2d(packed_2d: &[f32], rowstride: usize, coeff: &[f32]) -> Vec<f32> {
+pub fn dct_2d(packed_2d: &[f32], rowstride: usize, coeff: &Coefficients) -> Vec<f32> {
     assert_eq!(packed_2d.len() % rowstride, 0);
 
     let mut scratch = Vec::with_capacity(packed_2d.len() * 2);
@@ -111,12 +141,12 @@ pub fn dct_2d(packed_2d: &[f32], rowstride: usize, coeff: &[f32]) -> Vec<f32> {
     
         for (row_in, row_out) in packed_2d.chunks(rowstride)
                 .zip(row_pass.chunks_mut(rowstride)) {                
-            dct_1d(row_in, row_out, rowstride, coeff);
+            dct_1d(row_in, row_out, rowstride, coeff.row(rowstride));
         }
 
         for (col_in, mut col_out) in Columns::from_slice(row_pass, rowstride)
                 .zip(ColumnsMut::from_slice(col_pass, rowstride)) {
-            dct_1d(&col_in, &mut col_out, rowstride, coeff);
+            dct_1d(&col_in, &mut col_out, rowstride, coeff.column(rowstride));
         }
     }
 
