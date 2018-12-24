@@ -9,14 +9,17 @@
 // Implementation adapted from Python version:
 // https://github.com/commonsmachinery/blockhash-python/blob/e8b009d/blockhash.py
 // Main site: http://blockhash.io
-use Image;
+use image::{GenericImageView, Pixel};
+
+use {BitSet, Image, HashBytes};
 
 use std::cmp::Ordering;
+use std::ops::AddAssign;
 use std::mem;
 
 const FLOAT_EQ_MARGIN: f32 = 0.001;
 
-pub fn blockhash<I: HashImage>(img: &I, width: u32, height: u32) -> BitVec {
+pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B {
     assert_eq!(width % 4 == 0, "width must be multiple of 4");
     assert_eq!(height % 4 == 0, "height must be multiple of 4");
 
@@ -24,55 +27,62 @@ pub fn blockhash<I: HashImage>(img: &I, width: u32, height: u32) -> BitVec {
 
     // Skip the floating point math if it's unnecessary
     if iwidth % width == 0 && iheight % height == 0 {
-        blockhash_fast(img, size)
+        blockhash_fast(img, width, height)
     } else {
-        blockhash_slow(img, size)
+        blockhash_slow(img, width, height)
     }        
 } 
 
 macro_rules! gen_hash {
-    ($imgty:ty, $valty:ty, $blocks: expr, $size:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => ({
-        let channel_count = <$imgty as HashImage>::channel_count() as u32;
+    ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => ({
+        let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::channel_count() as u32;
 
-        let group_len = (($size * $size) / 4) as usize;
+        let group_len = ($width * 4) as usize;
 
         let block_area = $block_width * $block_height;
 
         let cmp_factor = match channel_count {
             3 | 4 => 255u32 as $valty * 3u32 as $valty,
             2 | 1 => 255u32 as $valty,
-            _ => panic!("Unrecognized channel count from HashImage: {}", channel_count),
+            _ => panic!("Unrecognized channel count from Image: {}", channel_count),
         }  
             * block_area 
             / (2u32 as $valty);
 
         let medians: Vec<$valty> = $blocks.chunks(group_len).map(get_median).collect();
 
-        $blocks.chunks(group_len).zip(medians)
+        BitSet::from_bools(
+            $blocks.chunks(group_len).zip(medians)
             .flat_map(|(blocks, median)| 
                 blocks.iter().map(move |&block| 
                     block > median ||
                         ($eq_fn(block, median) && median > cmp_factor)
                 )
             )
-            .collect()
+        )
     })
 }
 
-fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
-    let mut blocks = vec![0f64; (size * size) as usize];
+//noinspection RsNeedlessLifetimes
+// false positive
+fn block_adder<'a, T: AddAssign + 'a>(blocks: &'a mut [T], width: u32) -> impl Fn(u32, u32, T) + 'a {
+    move |x, y, add| (blocks[(y as usize) * (width as usize) + (x as usize)] += add)
+}
 
-    let (width, height) = img.dimensions();
+fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) -> B {
+    let mut blocks = vec![0f32; (hwidth * hheight) as usize];
+
+    let (iwidth, iheight) = img.dimensions();
     
     // Block dimensions, in pixels
-    let (block_width, block_height) = (width as f64 / size as f64, height as f64 / size as f64);
+    let (block_width, block_height) = (iwidth as f32 / hwidth as f32, iheight as f32 / hheight as f32);
 
-    let idx = |x, y| (y * size + x) as usize;
+    for (x, y, px) in img.pixels() {
+        let add_to_block = block_adder(&mut blocks, hwidth);
 
-    img.foreach_pixel(|x, y, px| {
-        let px_sum = sum_px(px) as f64;
+        let px_sum = sum_px(px) as f32;
 
-        let (x, y) = (x as f64, y as f64);
+        let (x, y) = (x as f32, y as f32);
 
         let block_x = x / block_width;
         let block_y = y / block_height;
@@ -103,35 +113,35 @@ fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
             block_top
         };
 
-        blocks[idx(block_left, block_top)] += px_sum * weight_left * weight_top;
-        blocks[idx(block_left, block_bottom)] += px_sum * weight_left * weight_bottom;
-        blocks[idx(block_right, block_top)] += px_sum * weight_right * weight_top;
-        blocks[idx(block_right, block_bottom)] += px_sum * weight_right * weight_bottom;
-    });
+        add_to_block(block_left, block_top, px_sum * weight_left * weight_top);
+        add_to_block(block_left, block_bottom, px_sum * weight_left * weight_bottom);
+        add_to_block(block_right, block_top, px_sum * weight_right * weight_top);
+        add_to_block(block_right, block_bottom, px_sum * weight_right * weight_bottom);
+    }
 
     
-    gen_hash!(I, f64, blocks, size, block_width, block_height,
-        |l: f64, r: f64| (l - r).abs() < FLOAT_EQ_MARGIN)
+    gen_hash!(I, f32, blocks, hwidth, block_width, block_height,
+        |l: f32, r: f32| (l - r).abs() < FLOAT_EQ_MARGIN)
 }
 
-fn blockhash_fast<I: HashImage>(img: &I, size: u32) -> BitVec {
-    let mut blocks = vec![0u32; (size * size) as usize];
-    let (width, height) = img.dimensions();
+fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) -> B {
+    let mut blocks = vec![0u32; (hwidth * hheight) as usize];
+    let (iwidth, iheight) = img.dimensions();
 
-    let (block_width, block_height) = (width / size, height / size);
+    let (block_width, block_height) = (iwidth / hwidth, iheight / hheight);
 
-    let idx = |x, y| (y * size + x) as usize;
+    for (x, y, px) in img.pixels() {
+        let add_to_block = block_adder(&mut blocks, hwidth);
 
-    img.foreach_pixel(|x, y, px| { 
         let px_sum = sum_px(px);
 
         let block_x = x / block_width;
         let block_y = y / block_width;
 
-        blocks[idx(block_x, block_y)] += px_sum;
-    });
+        add_to_block(block_x, block_y, px_sum);
+    }
 
-    gen_hash!(I, u32, blocks, size, block_width, block_height, |l, r| l == r)    
+    gen_hash!(I, u32, blocks, hwidth, block_width, block_height, |l, r| l == r)
 }
 
 #[inline(always)]
@@ -143,14 +153,9 @@ fn sum_px(px: &[u8]) -> u32 {
         2 => if px[1] == 0 { 255 } else { px[0] as u32 },
         1 => px[0] as u32,
         // We can only hit this assertion if there's a bug where the number of values
-        // per pixel doesn't match HashImage::channel_count
+        // per pixel doesn't match Image::channel_count
         _ => panic!("Channel count was different than actual pixel size"),
     }
-}
-
-// Get the next multiple of 4 up from x, or x if x is a multiple of 4
-fn next_multiple_of_4(x: u32) -> u32 {
-    x + 3 & !3
 }
 
 fn get_median<T: PartialOrd + Copy>(data: &[T]) -> T {
@@ -209,7 +214,7 @@ fn partition<T: PartialOrd>(data: &mut [T]) -> usize {
     curr
 }
 
-pub fn median_of_3<T: PartialOrd>(mut x: T, mut y: T, mut z: T) -> T {
+fn median_of_3<T: PartialOrd>(mut x: T, mut y: T, mut z: T) -> T {
     if x > y {
         mem::swap(&mut x, &mut y);
     }

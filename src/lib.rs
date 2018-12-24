@@ -53,7 +53,7 @@ use dct::dct_2d;
 use std::borrow::Cow;
 use std::{cmp, fmt, hash, mem, ops, slice};
 
-use image::{GenericImageView, GrayImage, ImageBuffer, Pixel, FilterType, Luma};
+use image::{GenericImageView, GrayImage, ImageBuffer, Pixel, Luma};
 use image::imageops;
 
 mod dct;
@@ -71,18 +71,21 @@ use std::marker::PhantomData;
 ///
 /// Please feel free to open a pull request [on Github](https://github.com/abonander/img_hash)
 /// if you need this implemented for a different array size.
-pub trait HashBytes: AsMut<[u8]> {
+pub trait HashBytes {
     /// Construct this type from an iterator of bytes.
     ///
     /// If this type has a finite capacity (i.e. an array) then it can ignore extra data
     /// (the hash API will not create a hash larger than this type can contain). Unused capacity
     /// **must** be zeroed.
-    fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self;
+    fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self where Self: Sized;
 
     /// Return the maximum capacity of this type, in bits.
     ///
     /// If this type has an arbitrary/theoretically infinite capacity, return `usize::max_value()`.
     fn max_bits() -> usize;
+
+    /// Get the hash bytes as a slice.
+    fn as_slice(&self) -> &[u8];
 }
 
 impl HashBytes for Box<[u8]> {
@@ -93,6 +96,8 @@ impl HashBytes for Box<[u8]> {
     fn max_bits() -> usize {
         usize::max_value()
     }
+
+    fn as_slice(&self) -> &[u8] { self }
 }
 
 impl HashBytes for Vec<u8> {
@@ -103,10 +108,12 @@ impl HashBytes for Vec<u8> {
     fn max_bits() -> usize {
         usize::max_value()
     }
+
+    fn as_slice(&self) -> &[u8] { self }
 }
 
 macro_rules! hash_bytes_array {
-    ($n:expr) => {
+    ($($n:expr),*) => {$(
         impl HashBytes for [u8; $n] {
             fn from_iter<I: Iterator<Item=u8>>(mut iter: I) -> Self {
                 // optimizer should eliminate this zeroing
@@ -122,17 +129,16 @@ macro_rules! hash_bytes_array {
             fn max_bits() -> usize {
                 $n * 8
             }
+
+            fn as_slice(&self) -> &[u8] { self }
         }
-    };
-    ($($n:expr),+) => {
-        hash_bytes_array!($n);
-    }
+    )*}
 }
 
 hash_bytes_array!(8, 16, 24, 32, 40, 48, 56, 64);
 
 trait BitSet: HashBytes {
-    fn from_bools<I: Iterator<Item = bool>>(mut iter: I) -> Self {
+    fn from_bools<I: Iterator<Item = bool>>(mut iter: I) -> Self where Self: Sized {
         struct BoolsToBytes<I> {
             iter: I,
         }
@@ -151,17 +157,14 @@ trait BitSet: HashBytes {
     }
 
     fn hamming(&self, other: &Self) -> u32 {
-        self.iter().zip(other.iter()).map(|l, r| (l ^ r).count_ones()).sum()
-    }
-
-    fn iter(&self) -> slice::Iter<u8> {
-        self.as_ref().iter()
+        self.as_slice().iter().zip(other.as_slice()).map(|(l, r)| (l ^ r).count_ones()).sum()
     }
 }
 
 impl<T: HashBytes> BitSet for T {}
 
-#[derive(Debug, Serialize, Deserialize)]
+// TODO: implement `Debug`, needs adaptor for `FilterType`
+#[derive(Serialize, Deserialize)]
 pub struct HasherConfig<B = Box<[u8]>> {
     width: u32,
     height: u32,
@@ -289,7 +292,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// * http://homepages.inf.ed.ac.uk/rbf/HIPR2/log.htm
     /// (Difference of Gaussians is an approximation of a Laplacian of Gaussian filter)
     pub fn preproc_diff_gauss_sigmas(self, sigma_a: f32, sigma_b: f32) -> Self {
-        Self { gauss_sigmas: Some([simgaA, simgaB]), ..self }
+        Self { gauss_sigmas: Some([sigma_a, sigma_b]), ..self }
     }
 
     /// Create a [`Hasher`](Hasher) from this config which can be used to hash images.
@@ -301,16 +304,18 @@ impl<B: HashBytes> HasherConfig<B> {
     /// If the chosen hash size (`width x height`, rounded for the algorithm if necessary)
     /// is too large for the chosen container type (`B::max_bits()`).
     pub fn into_hasher(self) -> Hasher<B> {
-        let Self { hash_alg, width, height, gauss_sigmas, resize_filter, dct } = self;
+        let Self { hash_alg, width, height, gauss_sigmas, resize_filter, dct, .. } = self;
 
         let (width, height) = hash_alg.round_hash_size(width, height);
 
         assert!((width * height) as usize <= B::max_bits(),
-                "hash size too large for container: () x ()", width, height);
+                "hash size too large for container: {} x {}", width, height);
 
         // Blockhash doesn't resize the image so don't waste time calculating coefficients
         let dct_coeffs = if dct && hash_alg != HashAlg::Blockhash {
-            Some(dct::Coefficients::precompute(width, height))
+            // calculate the coefficients based on the resize dimensions
+            let (dct_width, dct_height) = hash_alg.resize_dimensions(width, height);
+            Some(dct::Coefficients::precompute(dct_width, dct_height))
         } else {
             None
         };
@@ -326,9 +331,9 @@ impl<B: HashBytes> HasherConfig<B> {
     }
 }
 
-pub struct Hasher<B = Bytes8> {
+pub struct Hasher<B = Box<[u8]>> {
     ctxt: HashCtxt,
-    hash_alg: A,
+    hash_alg: HashAlg,
     bytes_type: PhantomData<B>,
 }
 
@@ -339,17 +344,27 @@ impl<B> Hasher<B> where B: HashBytes {
     }
 }
 
-enum CowImage<'a, I> {
+enum CowImage<'a, I: Image> {
     Borrowed(&'a I),
     Owned(ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>),
 }
 
-impl<'a, I> CowImage<'a, I> {
-    fn grayscale(&self) -> GrayImage {
-
+impl<'a, I: Image> CowImage<'a, I>
+    where ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>: Image {
+    fn to_grayscale(&self) -> Cow<GrayImage> {
+        match *self {
+            CowImage::Borrowed(ref img) => img.to_grayscale(),
+            CowImage::Owned(ref img) => img.to_grayscale(),
+        }
     }
 }
 
+enum HashVals {
+    Floats(Vec<f32>),
+    Bytes(Vec<u8>),
+}
+
+// TODO: implement `Debug`, needs adaptor for `FilterType`
 struct HashCtxt {
     gauss_sigmas: Option<[f32; 2]>,
     dct_coeffs: Option<dct::Coefficients>,
@@ -359,13 +374,13 @@ struct HashCtxt {
 }
 
 impl HashCtxt {
-    fn gauss_preproc<I: Image>(&self, image: &I) -> CowImage<I> {
+    fn gauss_preproc<'a, I: Image>(&self, image: &'a I) -> CowImage<'a, I> {
         if let Some([sigma_a, sigma_b]) = self.gauss_sigmas {
             let mut blur_a = imageops::blur(image, sigma_a);
             let blur_b = imageops::blur(image, sigma_b);
 
-            blur_a.pixels_mut().zip(blur_b)
-                .for_each(|lpx, rpx| lpx.apply2(&rpx, |lch, rch| lch - rch));
+            blur_a.pixels_mut().zip(blur_b.pixels())
+                .for_each(|(lpx, rpx)| lpx.apply2(&rpx, |lch, rch| lch - rch));
 
             CowImage::Owned(blur_a)
         } else {
@@ -373,9 +388,21 @@ impl HashCtxt {
         }
     }
 
-    fn gen_hash_vals(&self, img: &GrayImage, width: u32, height: u32) -> Box<[f32]> {
-        imageops::resize(img, width, height, self.resize_filter)
-            .pixels()
+    fn calc_hash_vals(&self, img: &GrayImage, width: u32, height: u32) -> HashVals {
+        if let Some(ref coeffs) = self.dct_coeffs {
+            let width = width * dct::SIZE_MULTIPLIER;
+
+            let img = imageops::resize(img, width, height * dct::SIZE_MULTIPLIER,
+                                       self.resize_filter);
+
+            let img_vals: Vec<f32> = img.into_vec().into_iter()
+                .map(|x| x as f32 / 256 as f32).collect();
+
+            HashVals::Floats(dct::dct_2d(&img_vals, width as usize, coeffs))
+        } else {
+            let img = imageops::resize(img, width, height, self.resize_filter);
+            HashVals::Bytes(img.into_vec())
+        }
     }
 }
 
@@ -396,12 +423,10 @@ impl<B: HashBytes> ImageHash<B> {
     /// 
     /// Essential to determining the perceived difference between `self` and `other`.
     ///
-    /// ### Panics
-    /// If `self` and `other` have differing hash lengths.
+    /// ### Note
+    /// This return value is meaningless if these two hashes are from different hash sizes or
+    /// algorithms.
     pub fn dist(&self, other: &Self) -> u32 {
-        assert_eq!(self.hash.as_ref().len(), other.as_ref().hash.len(),
-                   "Image hashes must be the same length for proper comparison!");
-
         BitSet::hamming(&self.hash, &other.hash)
     }
 
@@ -417,8 +442,8 @@ impl<B: HashBytes> ImageHash<B> {
         }
 
         Ok(ImageHash {
-            hash: B::from_iter(bytes.into_iter())
-            __backcompat
+            hash: B::from_iter(bytes.into_iter()),
+            __backcompat: (),
         })
     }
 
@@ -426,7 +451,7 @@ impl<B: HashBytes> ImageHash<B> {
     ///
     /// Mostly for printing convenience.
     pub fn to_base64(&self) -> String {
-        base64::encode(&self.bytes)
+        base64::encode(self.hash.as_slice())
     }
 }
 
@@ -478,26 +503,29 @@ impl<'a, T: 'a> ops::Index<usize> for Column<'a, T> {
     }
 }
 
-
-
+/// Shorthand trait bound for APIs in this crate.
 ///
+/// Currently only implemented for the types provided by `image` with 8-bit channels.
 pub trait Image: GenericImageView + 'static {
     /// Grayscale the image, reducing to 8 bit depth and dropping the alpha channel.
-    fn to_grayscale(&self) -> GrayImage;
+    fn to_grayscale(&self) -> Cow<GrayImage>;
 }
 
-impl<I> Image for I where I: GenericImageView + 'static, I::Pixel: Pixel<Subpixel = u8> {
-    fn to_grayscale(&self) -> GrayImage {
-        self.pixels().iter().map(|px| px.to_luma()).collect()
-    }
+macro_rules! impl_image_u8 {
+    ($($imgty:path),*) => {$(
+        impl Image for $imgty {
+            fn to_grayscale(&self) -> Cow<GrayImage> {
+                imageops::grayscale(self).into()
+            }
+        }
+    )*}
 }
 
-impl<I> Image for I where I: GenericImageView + 'static, I::Pixel: Pixel<Subpixel = u16> {
-    fn to_grayscale(&self) -> GrayImage {
-        self.pixels().iter().map(|px| {
-            let luma = px.to_luma();
-            Luma([(luma.0[0] / 256) as u8])
-        }).collect()
+impl_image_u8!(image::GrayAlphaImage, image::RgbImage, image::RgbaImage);
+
+impl Image for GrayImage {
+    fn to_grayscale(&self) -> Cow<GrayImage> {
+        self.into()
     }
 }
 
@@ -531,6 +559,7 @@ enum SerdeFilterType {
     Lanczos3,
 }
 
+/*
 #[cfg(test)]
 mod test {
     extern crate rand;
@@ -769,3 +798,4 @@ mod test {
         }
     }
 }
+*/

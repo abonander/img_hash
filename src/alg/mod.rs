@@ -1,8 +1,12 @@
-mod block;
+mod blockhash;
 
-use {HashBytes, HashCtxt, Image};
+use {BitSet, HashCtxt, Image};
 
 use self::HashAlg::*;
+use HashVals::*;
+use CowImage::*;
+
+use image::{GrayImage, imageops};
 
 /// Hash algorithms implemented by this crate.
 ///
@@ -77,11 +81,38 @@ fn next_multiple_of_4(x: u32) -> u32 { x + 3 & !3 }
 
 impl HashAlg {
     pub (crate) fn hash_image<I, B>(&self, ctxt: &HashCtxt, image: &I) -> B
-    where I: Image, B: HashBytes {
-        let cow_gaussed = ctx.gauss_preproc();
+    where I: Image, B: BitSet {
+        let post_gauss = ctxt.gauss_preproc(image);
+
+        let HashCtxt { width, height, .. } = *ctxt;
 
         if *self == Blockhash {
+            return match post_gauss {
+                Borrowed(img) => blockhash::blockhash(img, width, height),
+                Owned(img) => blockhash::blockhash(&img, width, height),
+            };
+        }
 
+        let grayscale = post_gauss.to_grayscale();
+        let (resize_width, resize_height) = self.resize_dimensions(width, height);
+
+        let hash_vals = ctxt.calc_hash_vals(&*grayscale, resize_width, resize_height);
+
+        let rowstride = resize_width as usize;
+
+        match (*self, hash_vals) {
+            (Mean, Floats(ref floats)) => B::from_bools(mean_hash_f32(floats)),
+            (Mean, Bytes(ref bytes)) => B::from_bools(mean_hash_u8(bytes)),
+            (Gradient, Floats(ref floats)) => B::from_bools(gradient_hash(floats, rowstride)),
+            (Gradient, Bytes(ref bytes)) => B::from_bools(gradient_hash(bytes, rowstride)),
+            (VertGradient, Floats(ref floats)) => B::from_bools(vert_gradient_hash(floats,
+                                                                                   rowstride)),
+            (VertGradient, Bytes(ref bytes)) => B::from_bools(vert_gradient_hash(bytes, rowstride)),
+            (DoubleGradient, Floats(ref floats)) => B::from_bools(double_gradient_hash(floats,
+                                                                                       rowstride)),
+            (DoubleGradient, Bytes(ref bytes)) => B::from_bools(double_gradient_hash(bytes,
+                                                                                     rowstride)),
+            (Blockhash, _) | (__Nonexhaustive, _) => unreachable!(),
         }
     }
 
@@ -89,10 +120,11 @@ impl HashAlg {
         match *self {
             DoubleGradient => (next_multiple_of_2(width), next_multiple_of_2(height)),
             Blockhash => (next_multiple_of_4(width), next_multiple_of_4(height)),
+            _ => (width, height),
         }
     }
 
-    fn resize_dimensions(&self, width: u32, height: u32) -> (u32, u32) {
+    pub (crate) fn resize_dimensions(&self, width: u32, height: u32) -> (u32, u32) {
         match *self {
             Mean => (width, height),
             Blockhash => panic!("Blockhash algorithm does not resize"),
@@ -103,55 +135,31 @@ impl HashAlg {
     }
 }
 
-fn mean_hash<I: Image, B: HashBytes>(img: &I, hash_size: u32) -> B {
-    let hash_values = prepare_image(img, hash_size, hash_size);
-
-    let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b)
-        / hash_values.len() as u32;
-
-    hash_values.into_iter().map(|x| x as u32 >= mean)
+fn mean_hash_u8<'a>(luma: &'a [u8]) -> impl Iterator<Item = bool> + 'a {
+    let mean = (luma.iter().map(|&l| l as u32).sum::<u32>() / luma.len() as u32) as u8;
+    luma.iter().map(|&x| x >= mean)
 }
 
-
-/// The guts of the gradient hash,
-/// separated so we can reuse them for both `Gradient` and `DoubleGradient`.
-fn gradient_hash_impl<I: ops::Index<usize, Output=u8> + ?Sized>(bytes: &I, len: u32, bitv: &mut HashBytes) {
-    let len = len as usize;
-
-    for i in 1 .. len {
-        let this = &bytes[i];
-        let last = &bytes[i - 1];
-
-        bitv.push(last < this);
-    }
+fn mean_hash_f32<'a>(luma: &'a [f32]) -> impl Iterator<Item = bool> + 'a {
+    let mean = luma.iter().sum::<f32>() / luma.len() as f32;
+    luma.iter().map(|&x| x >= mean)
 }
 
-fn gradient_hash<I: Image>(img: &I, hash_size: u32) -> HashBytes {
-    // We have one extra pixel in width so we have `hash_size` comparisons per row.
-    let bytes = prepare_image(img, hash_size + 1, hash_size);
-    let mut bitv = HashBytes::with_capacity((hash_size * hash_size) as usize);
-
-    for row in bytes.chunks((hash_size + 1) as usize) {
-        gradient_hash_impl(row, hash_size, &mut bitv);
-    }
-
-    bitv
+/// The guts of the gradient hash separated so we can reuse them
+fn gradient_hash_impl<I>(luma: I) -> impl Iterator<Item = bool>
+    where I: IntoIterator + Clone, <I as IntoIterator>::Item: PartialOrd {
+    luma.clone().into_iter().skip(1).zip(luma).map(|(this, last)| last < this)
 }
 
-fn double_gradient_hash<I: Image>(img: &I, hash_size: u32) -> HashBytes {
-    // We have one extra pixel in each dimension so we have `hash_size` comparisons.
-    let rowstride = hash_size + 1;
-    let bytes = prepare_image(img, rowstride, rowstride);
-    let mut bitv = HashBytes::with_capacity((hash_size * hash_size * 2) as usize);
+fn gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+    luma.chunks(rowstride).flat_map(gradient_hash_impl)
+}
 
+fn vert_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+    (0 .. rowstride).map(|col_start| luma[col_start..].iter().step_by(rowstride))
+        .flat_map(gradient_hash_impl)
+}
 
-    for row in bytes.chunks(rowstride as usize) {
-        gradient_hash_impl(row, rowstride, &mut bitv);
-    }
-
-    for column in Columns::from_slice(&bytes, rowstride as usize) {
-        gradient_hash_impl(&column, hash_size, &mut bitv);
-    }
-
-    bitv
+fn double_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+    gradient_hash(luma, rowstride).chain(vert_gradient_hash(luma, rowstride))
 }
