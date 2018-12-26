@@ -5,65 +5,31 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::Columns;
 
-use std::cell::RefCell;
 use std::f32::consts::{PI, SQRT_2};
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 pub const SIZE_MULTIPLIER: u32 = 2;
+pub const SIZE_MULTIPLIER_U: usize = SIZE_MULTIPLIER as usize;
 
-struct ColumnsMut<'a, T: 'a> {
-    data: &'a mut [T],
-    rowstride: usize,
-    curr: usize,
-}
-
-impl<'a, T: 'a> ColumnsMut<'a, T> {
-    #[inline(always)]
-    fn from_slice(data: &'a mut [T], rowstride: usize) -> Self {
-        ColumnsMut {
-            data,
-            rowstride,
-            curr: 0,
-        }
-    }
-}
-
-impl<'a, T: 'a> Iterator for ColumnsMut<'a, T> {
-    type Item = ColumnMut<'a, T>;
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.curr < self.rowstride {
-           let data = unsafe { &mut *(&mut self.data[self.curr..] as *mut [T]) };
-            self.curr += 1;
-            Some(ColumnMut {
-                data,
-                rowstride: self.rowstride,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-struct ColumnMut<'a, T: 'a> {
-    data: &'a mut [T],
+struct IdxCol<D> {
+    data: D,
+    col: usize,
     rowstride: usize,
 }
 
-impl<'a, T: 'a> Index<usize> for ColumnMut<'a, T> {
-    type Output = T;
+impl<D> Index<usize> for IdxCol<D> where D: Deref, D::Target: Index<usize> {
+    type Output = <<D as Deref>::Target as Index<usize>>::Output;
     #[inline(always)]
-    fn index(&self, idx: usize) -> &T {
-       &self.data[idx * self.rowstride]
+    fn index(&self, idx: usize) -> &Self::Output {
+       &self.data[idx * self.rowstride + self.col]
     }
 }
 
-impl<'a, T: 'a> IndexMut<usize> for ColumnMut<'a, T> {
+impl<D> IndexMut<usize> for IdxCol<D> where D: DerefMut, D::Target: IndexMut<usize> {
     #[inline(always)]
-    fn index_mut(&mut self, idx: usize) -> &mut T {
-       &mut self.data[idx * self.rowstride]
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+       &mut self.data[idx * self.rowstride + self.col]
     }
 }
 
@@ -103,7 +69,7 @@ fn precompute_coeff(size: u32) -> impl Iterator<Item=f32> {
     // precompute a matrix of the right size
     let size =  size * SIZE_MULTIPLIER;
 
-    (0 .. size).flat_map(|i|
+    (0 .. size).flat_map(move |i|
         (0 .. size).map(move |j| (PI * i as f32 * (2 * j + 1) as f32 / (2 * size) as f32).cos())
     )
 }
@@ -131,10 +97,12 @@ where I: Index<usize, Output=f32>, O: IndexMut<usize, Output=f32> {
 ///
 /// Returns a vector of the same size packed in the same way.
 pub fn dct_2d(packed_2d: &[f32], rowstride: usize, coeff: &Coefficients) -> Vec<f32> {
+    // 2D DCT implemented in O(n ^2) time by performing a 1D DCT on the rows
+    // and then on the columns
+
     assert_eq!(packed_2d.len() % rowstride, 0);
 
-    let mut scratch = Vec::with_capacity(packed_2d.len() * 2);
-    unsafe { scratch.set_len(packed_2d.len() * 2); }
+    let mut scratch = vec![0f32; packed_2d.len() * 2];
 
     {
         let (col_pass, row_pass) = scratch.split_at_mut(packed_2d.len());
@@ -144,8 +112,10 @@ pub fn dct_2d(packed_2d: &[f32], rowstride: usize, coeff: &Coefficients) -> Vec<
             dct_1d(row_in, row_out, rowstride, coeff.row(rowstride));
         }
 
-        for (col_in, mut col_out) in Columns::from_slice(row_pass, rowstride)
-                .zip(ColumnsMut::from_slice(col_pass, rowstride)) {
+        for col in 0 .. rowstride {
+            let col_in = IdxCol { data: &mut *row_pass, col, rowstride };
+            // we overwrite the row pass with the column pass
+            let mut col_out = IdxCol { data: &mut *col_pass, col, rowstride };
             dct_1d(&col_in, &mut col_out, rowstride, coeff.column(rowstride));
         }
     }
@@ -154,74 +124,41 @@ pub fn dct_2d(packed_2d: &[f32], rowstride: usize, coeff: &Coefficients) -> Vec<
     scratch
 }
 
-/*
-#[cfg(feature = "simd")]
-mod dct_simd {
-    use simdty::f32x2;
+/// Crop the values off a 1D-packed 2D DCT
+///
+/// Generic for easier testing
+pub fn crop_2d_dct<T: Copy>(mut packed: Vec<T>, rowstride: usize) -> Vec<T> {
+    // assert that the rowstride was previously multiplied by SIZE_MULTIPLIER
+    assert_eq!(rowstride % SIZE_MULTIPLIER_U, 0);
+    assert!(rowstride / SIZE_MULTIPLIER_U > 0, "rowstride cannot be cropped: {}", rowstride);
 
-    use std::f32::consts::{PI, SQRT_2};
-    
-    macro_rules! valx2 ( ($val:expr) => ( ::simdty::f32x2($val, $val) ) );
+    let new_rowstride = rowstride / SIZE_MULTIPLIER_U;
 
-    const PI: f32x2 = valx2!(PI);
-    const ONE_DIV_SQRT_2: f32x2 = valx2!(1 / SQRT_2);
-    const SQRT_2: f32x2 = valx2!(SQRT_2);
-
-    pub dct_rows(vals: &[Vec<f32>]) -> Vec<Vec<f32>> {
-        let mut out = Vec::with_capacity(vals.len());
-
-        for pair in vals.iter().chunks(2) {
-            if pair.len() == 2 {
-                let vals = pair[0].iter().cloned().zip(pair[1].iter().cloned())
-                    .map(f32x2)
-                    .collect();
-
-                dct_1dx2(vals);
-
-
-        
-        }
+    for new_row in 0 .. packed.len() / (rowstride * SIZE_MULTIPLIER_U) {
+        let (dest, src) = packed.split_at_mut(new_row * new_rowstride + rowstride);
+        let dest_start = dest.len() - new_rowstride;
+        let src_start = new_rowstride * new_row;
+        let src_end = src_start + new_rowstride;
+        dest[dest_start..].copy_from_slice(&src[src_start..src_end]);
     }
 
-    fn dct_1dx2(vec: Vec<f32x2>) -> Vec<f32x2> {
-        let mut out = Vec::with_capacity(vec.len());
+    let new_len = packed.len() / (SIZE_MULTIPLIER_U * SIZE_MULTIPLIER_U);
+    packed.truncate(new_len);
 
-        for u in 0 .. vec.len() {
-            let mut z = valx2!(0.0);
-
-            for x in 0 .. vec.len() {
-                z += vec[x] * cos_approx(
-                    PI * valx2!(
-                        u as f32 * (2 * x + 1) as f32 
-                            / (2 * vec.len()) as f32
-                    )
-                );
-            }
-
-            if u == 0 {
-                z *= ONE_DIV_SQRT_2;
-            }
-
-            out.insert(u, z / valx2!(2.0));
-        }
-
-        out 
-    }
-
-    fn cos_approx(x2: f32x2) -> f32x2 {
-        #[inline(always)]
-        fn powi(val: f32x2, pow: i32) -> f32x2 {
-            unsafe { llvmint::powi_v2f32(val, pow) }
-        }
-
-        let x2 = powi(val, 2);
-        let x4 = powi(val, 4);
-        let x6 = powi(val, 6);
-        let x8 = powi(val, 8);
-
-        valx2!(1.0) - (x2 / valx2!(2.0)) + (x4 / valx2!(24.0)) 
-            - (x6 / valx2!(720.0)) + (x8 / valx2!(40320.0))
-    }
+    packed
 }
-*/
 
+#[test]
+fn test_crop_2d_dct() {
+    let packed: Vec<i32> = (0 .. 64).collect();
+    assert_eq!(
+        crop_2d_dct(packed.clone(), 8),
+        [
+            0, 1, 2, 3, // 4, 5, 6, 7
+            8, 9, 10, 11, // 12, 13, 14, 15
+            16, 17, 18, 19, // 20, 21, 22, 23,
+            24, 25, 26, 27, // 28, 29, 30, 31,
+            // 32 .. 64
+        ]
+    );
+}

@@ -20,8 +20,8 @@ use std::mem;
 const FLOAT_EQ_MARGIN: f32 = 0.001;
 
 pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B {
-    assert_eq!(width % 4 == 0, "width must be multiple of 4");
-    assert_eq!(height % 4 == 0, "height must be multiple of 4");
+    assert_eq!(width % 4, 0, "width must be multiple of 4");
+    assert_eq!(height % 4, 0, "height must be multiple of 4");
 
     let (iwidth, iheight) = img.dimensions();
 
@@ -65,7 +65,7 @@ macro_rules! gen_hash {
 
 //noinspection RsNeedlessLifetimes
 // false positive
-fn block_adder<'a, T: AddAssign + 'a>(blocks: &'a mut [T], width: u32) -> impl Fn(u32, u32, T) + 'a {
+fn block_adder<'a, T: AddAssign + 'a>(blocks: &'a mut [T], width: u32) -> impl FnMut(u32, u32, T) + 'a {
     move |x, y, add| (blocks[(y as usize) * (width as usize) + (x as usize)] += add)
 }
 
@@ -77,8 +77,8 @@ fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
     // Block dimensions, in pixels
     let (block_width, block_height) = (iwidth as f32 / hwidth as f32, iheight as f32 / hheight as f32);
 
-    for (x, y, px) in img.pixels() {
-        let add_to_block = block_adder(&mut blocks, hwidth);
+    img.foreach_pixel8(|x, y, px| {
+        let mut add_to_block = block_adder(&mut blocks, hwidth);
 
         let px_sum = sum_px(px) as f32;
 
@@ -117,7 +117,7 @@ fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         add_to_block(block_left, block_bottom, px_sum * weight_left * weight_bottom);
         add_to_block(block_right, block_top, px_sum * weight_right * weight_top);
         add_to_block(block_right, block_bottom, px_sum * weight_right * weight_bottom);
-    }
+    });
 
     
     gen_hash!(I, f32, blocks, hwidth, block_width, block_height,
@@ -130,8 +130,8 @@ fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
 
     let (block_width, block_height) = (iwidth / hwidth, iheight / hheight);
 
-    for (x, y, px) in img.pixels() {
-        let add_to_block = block_adder(&mut blocks, hwidth);
+    img.foreach_pixel8(|x, y, px| {
+        let mut add_to_block = block_adder(&mut blocks, hwidth);
 
         let px_sum = sum_px(px);
 
@@ -139,22 +139,20 @@ fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         let block_y = y / block_width;
 
         add_to_block(block_x, block_y, px_sum);
-    }
+    });
 
     gen_hash!(I, u32, blocks, hwidth, block_width, block_height, |l, r| l == r)
 }
 
 #[inline(always)]
-fn sum_px(px: &[u8]) -> u32 {
+fn sum_px(chans: &[u8]) -> u32 {
     // Branch prediction should eliminate the match after a few iterations
-    match px.len() {
-        4 => if px[3] == 0 { 255 * 3 } else { sum_px(&px[..3]) },
-        3 => px[0] as u32 + px[1] as u32 + px[2] as u32,
-        2 => if px[1] == 0 { 255 } else { px[0] as u32 },
-        1 => px[0] as u32,
-        // We can only hit this assertion if there's a bug where the number of values
-        // per pixel doesn't match Image::channel_count
-        _ => panic!("Channel count was different than actual pixel size"),
+    match chans.len() {
+        4 => if chans[3] == 0 { 255 * 3 } else { sum_px(&chans[..3]) },
+        3 => chans.iter().map(|&x| x as u32).sum(),
+        2 => if chans[1] == 0 { 255 } else { chans[0] as u32 },
+        1 => chans[0] as u32,
+        channels => panic!("Unsupported channel count in image: {}", channels),
     }
 }
 

@@ -6,8 +6,6 @@ use self::HashAlg::*;
 use HashVals::*;
 use CowImage::*;
 
-use image::{GrayImage, imageops};
-
 /// Hash algorithms implemented by this crate.
 ///
 /// Implemented primarily based on the high-level descriptions on the blog Hacker Factor
@@ -131,18 +129,19 @@ impl HashAlg {
             Gradient => (width + 1, height),
             VertGradient => (width, height + 1),
             DoubleGradient => (width / 2 + 1, height / 2 + 1),
+            __Nonexhaustive => panic!("not a real hash algorithm"),
         }
     }
 }
 
 fn mean_hash_u8<'a>(luma: &'a [u8]) -> impl Iterator<Item = bool> + 'a {
     let mean = (luma.iter().map(|&l| l as u32).sum::<u32>() / luma.len() as u32) as u8;
-    luma.iter().map(|&x| x >= mean)
+    luma.iter().map(move |&x| x >= mean)
 }
 
 fn mean_hash_f32<'a>(luma: &'a [f32]) -> impl Iterator<Item = bool> + 'a {
     let mean = luma.iter().sum::<f32>() / luma.len() as f32;
-    luma.iter().map(|&x| x >= mean)
+    luma.iter().map(move |&x| x >= mean)
 }
 
 /// The guts of the gradient hash separated so we can reuse them
@@ -156,7 +155,7 @@ fn gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Ite
 }
 
 fn vert_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
-    (0 .. rowstride).map(|col_start| luma[col_start..].iter().step_by(rowstride))
+    (0 .. rowstride).map(move |col_start| luma[col_start..].iter().step_by(rowstride))
         .flat_map(gradient_hash_impl)
 }
 

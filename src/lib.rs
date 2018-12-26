@@ -38,22 +38,23 @@
 #![deny(missing_docs)]
 // Silence feature warnings for test module.
 #![cfg_attr(all(test, feature = "bench"), feature(test))]
+#![cfg_attr(feature = "nightly", feature(specialization))]
 
 extern crate base64;
 
 pub extern crate image;
 pub use image::FilterType;
 
+extern crate num_traits;
+
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-use dct::dct_2d;
-
 use std::borrow::Cow;
-use std::{cmp, fmt, hash, mem, ops, slice};
+use std::ops;
 
-use image::{GenericImageView, GrayImage, ImageBuffer, Pixel, Luma};
+use image::{DynamicImage, GenericImageView, GrayImage, ImageBuffer, Pixel};
 use image::imageops;
 
 mod dct;
@@ -138,7 +139,7 @@ macro_rules! hash_bytes_array {
 hash_bytes_array!(8, 16, 24, 32, 40, 48, 56, 64);
 
 trait BitSet: HashBytes {
-    fn from_bools<I: Iterator<Item = bool>>(mut iter: I) -> Self where Self: Sized {
+    fn from_bools<I: Iterator<Item = bool>>(iter: I) -> Self where Self: Sized {
         struct BoolsToBytes<I> {
             iter: I,
         }
@@ -346,11 +347,10 @@ impl<B> Hasher<B> where B: HashBytes {
 
 enum CowImage<'a, I: Image> {
     Borrowed(&'a I),
-    Owned(ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>),
+    Owned(I::Buf),
 }
 
-impl<'a, I: Image> CowImage<'a, I>
-    where ImageBuffer<I::Pixel, Vec<<I::Pixel as Pixel>::Subpixel>>: Image {
+impl<'a, I: Image> CowImage<'a, I> {
     fn to_grayscale(&self) -> Cow<GrayImage> {
         match *self {
             CowImage::Borrowed(ref img) => img.to_grayscale(),
@@ -376,11 +376,9 @@ struct HashCtxt {
 impl HashCtxt {
     fn gauss_preproc<'a, I: Image>(&self, image: &'a I) -> CowImage<'a, I> {
         if let Some([sigma_a, sigma_b]) = self.gauss_sigmas {
-            let mut blur_a = imageops::blur(image, sigma_a);
-            let blur_b = imageops::blur(image, sigma_b);
-
-            blur_a.pixels_mut().zip(blur_b.pixels())
-                .for_each(|(lpx, rpx)| lpx.apply2(&rpx, |lch, rch| lch - rch));
+            let mut blur_a = image.blur(sigma_a);
+            let blur_b = image.blur(sigma_b);
+            blur_a.diff_inplace(&blur_b);
 
             CowImage::Owned(blur_a)
         } else {
@@ -396,9 +394,10 @@ impl HashCtxt {
                                        self.resize_filter);
 
             let img_vals: Vec<f32> = img.into_vec().into_iter()
-                .map(|x| x as f32 / 256 as f32).collect();
+                .map(|x| x as f32 / 255 as f32).collect();
 
-            HashVals::Floats(dct::dct_2d(&img_vals, width as usize, coeffs))
+            let hash_vals = dct::dct_2d(&img_vals, width as usize, coeffs);
+            HashVals::Floats(dct::crop_2d_dct(hash_vals, width as usize))
         } else {
             let img = imageops::resize(img, width, height, self.resize_filter);
             HashVals::Bytes(img.into_vec())
@@ -455,96 +454,85 @@ impl<B: HashBytes> ImageHash<B> {
     }
 }
 
-
-struct Columns<'a, T: 'a> {
-    data: &'a [T],
-    rowstride: usize,
-    curr: usize,
-}
-
-impl<'a, T: 'a> Columns<'a, T> {
-    #[inline(always)]
-    fn from_slice(data: &'a [T], rowstride: usize) -> Self {
-        Columns {
-            data: data,
-            rowstride: rowstride,
-            curr: 0,
-        }
-    }
-}
-
-impl<'a, T: 'a> Iterator for Columns<'a, T> {
-    type Item = Column<'a, T>;
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.curr < self.rowstride {
-            let data = &self.data[self.curr..];
-            self.curr += 1;
-            Some(Column {
-                data: data,
-                rowstride: self.rowstride,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-struct Column<'a, T: 'a> {
-    data: &'a [T],
-    rowstride: usize,
-}
-
-impl<'a, T: 'a> ops::Index<usize> for Column<'a, T> {
-    type Output = T;
-    #[inline(always)]
-    fn index(&self, idx: usize) -> &T {
-       &self.data[idx * self.rowstride]
-    }
-}
-
 /// Shorthand trait bound for APIs in this crate.
 ///
 /// Currently only implemented for the types provided by `image` with 8-bit channels.
 pub trait Image: GenericImageView + 'static {
+    /// The equivalent `ImageBuffer` type for this container.
+    type Buf: Image + DiffImage;
+
     /// Grayscale the image, reducing to 8 bit depth and dropping the alpha channel.
     fn to_grayscale(&self) -> Cow<GrayImage>;
+
+    /// Blur the image with the given `Gaussian` sigma.
+    fn blur(&self, sigma: f32) -> Self::Buf;
+
+    /// Iterate over the image, passing each pixel's coordinates and values in `u8` to the closure.
+    ///
+    /// The iteration order is unspecified but each pixel **must** be visited exactly _once_.
+    ///
+    /// If the pixel's channels are wider than 8 bits then the values should be scaled to
+    /// `[0, 255]`, not truncated.
+    ///
+    /// ### Note
+    /// If the pixel data length is 2 or 4, the last index is assumed to be the alpha channel.
+    /// A pixel data length outside of `[1, 4]` will cause a panic.
+    fn foreach_pixel8<F>(&self, foreach: F) where F: FnMut(u32, u32, &[u8]);
 }
 
-macro_rules! impl_image_u8 {
-    ($($imgty:path),*) => {$(
-        impl Image for $imgty {
-            fn to_grayscale(&self) -> Cow<GrayImage> {
-                imageops::grayscale(self).into()
-            }
-        }
-    )*}
+/// Image types that can be diffed.
+pub trait DiffImage {
+    /// Subtract the pixel values of `other` from `self` in-place.
+    fn diff_inplace(&mut self, other: &Self);
 }
 
-impl_image_u8!(image::GrayAlphaImage, image::RgbImage, image::RgbaImage);
+impl<P: 'static, C: 'static> Image for ImageBuffer<P, C> where P: Pixel<Subpixel = u8>, C: ops::Deref<Target=[u8]> {
+    type Buf = ImageBuffer<P, Vec<u8>>;
 
-impl Image for GrayImage {
     fn to_grayscale(&self) -> Cow<GrayImage> {
-        self.into()
+        Cow::Owned(imageops::grayscale(self))
+    }
+
+    fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
+
+    fn foreach_pixel8<F>(&self, mut foreach: F) where F: FnMut(u32, u32, &[u8]) {
+        self.enumerate_pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
     }
 }
 
-/// Crop the values off a 1D-packed 2D DCT
-fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) -> Vec<f64> {
-    let (orig_width, orig_height) = original;
+impl<P: 'static> DiffImage for ImageBuffer<P, Vec<u8>> where P: Pixel<Subpixel = u8> {
+    fn diff_inplace(&mut self, other: &Self) {
+        self.iter_mut().zip(other.iter()).for_each(|(l, r)| *l -= r);
+    }
+}
 
-    assert_eq!(packed.len(), orig_width * orig_height);
+impl Image for DynamicImage {
+    type Buf = image::RgbaImage;
 
-    let (new_width, new_height) = new;
+    fn to_grayscale(&self) -> Cow<GrayImage> {
+        self.as_luma8().map_or_else(|| Cow::Owned(self.to_luma()), Cow::Borrowed)
+    }
 
-    assert!(new_width < orig_width && new_height < orig_height);
+    fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
 
-    (0 .. new_height).flat_map(|y| {
-        let start = y * orig_width;
-        let end = start + new_width;
+    fn foreach_pixel8<F>(&self, mut foreach: F) where F: FnMut(u32, u32, &[u8]) {
+        self.pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
+    }
+}
 
-        packed[start .. end].iter().cloned()
-    }).collect()
+#[cfg(feature = "nightly")]
+impl Image for GrayImage {
+    type Buf = Self;
+
+    fn to_grayscale(&self) -> Cow<GrayImage> {
+        Cow::Borrowed(self)
+    }
+
+    fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
+
+    fn foreach_pixel8<F>(&self, mut foreach: F) where F: FnMut(u32, u32, &[u8]) {
+        self.enumerate_pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
+    }
 }
 
 /// Provide Serde a typedef for `image::FilterType`: https://serde.rs/remote-derive.html
