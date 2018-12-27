@@ -14,7 +14,6 @@ use CowImage::*;
 /// ### Choosing an Algorithm
 /// Each algorithm has different performance characteristics
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
 pub enum HashAlg {
     /// The Mean hashing algorithm.
     ///
@@ -45,13 +44,13 @@ pub enum HashAlg {
 
     /// The Vertical-Gradient hashing algorithm.
     ///
-    /// Equivalent to [`Gradient`](Self::Gradient) but operating on the columns of the image
+    /// Equivalent to [`Gradient`](Gradient) but operating on the columns of the image
     /// instead of the rows.
     VertGradient,
 
     /// The Double-Gradient hashing algorithm.
     ///
-    /// An advanced version of [`Gradient`](Self::Gradient);
+    /// An advanced version of [`Gradient`](Gradient);
     /// resizes the grayscaled image to `(width / 2 + 1) x (height / 2 + 1)` and compares columns
     /// in addition to rows.
     ///
@@ -68,7 +67,9 @@ pub enum HashAlg {
     /// The algorithm is described in a high level here:
     /// https://github.com/commonsmachinery/blockhash-rfc/blob/master/main.md
     Blockhash,
-    /// EXHAUSTIVE MATCHING IS NOT RECOMMENDED FOR BACKWARDS COMPATIBILITY
+
+    /// EXHAUSTIVE MATCHING IS NOT RECOMMENDED FOR BACKWARDS COMPATIBILITY REASONS
+    /// New variants may be added in minor (x.[y + 1].z) releases
     #[doc(hidden)]
     #[serde(skip)]
     __Nonexhaustive,
