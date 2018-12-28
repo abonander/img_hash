@@ -26,3 +26,15 @@ image = "0.20"
 num-traits = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 
+[dev-dependencies]
+criterion = "0.2"
+rustdct = "0.3"
+
+[[bench]]
+name = "our_dct"
+harness = false
+required-features = ["bench"]
+
+[[bench]]
+name = "rustdct"
+harness = false

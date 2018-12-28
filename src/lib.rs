@@ -55,11 +55,17 @@ use std::borrow::Cow;
 use std::{fmt, ops};
 use std::marker::PhantomData;
 
+#[cfg(not(feature = "bench"))]
 mod dct;
+
+#[cfg(feature = "bench")]
+#[allow(missing_docs)]
+pub mod dct;
 
 mod alg;
 
 pub use alg::HashAlg;
+
 
 /// Interface for types used for storing hash data.
 ///
@@ -220,7 +226,6 @@ impl<T: HashBytes> BitSet for T {}
 /// let config = HasherConfig::with_bytes_type::<[u8; 8]>();
 /// ```
 ///
-// TODO: implement `Debug`, needs adaptor for `FilterType`
 #[derive(Serialize, Deserialize)]
 pub struct HasherConfig<B = Box<[u8]>> {
     width: u32,
@@ -397,6 +402,20 @@ impl<B: HashBytes> HasherConfig<B> {
             bytes_type: PhantomData
         }
 
+    }
+}
+
+// cannot be derived because of `FilterType`
+impl<B> fmt::Debug for HasherConfig<B> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("HasherConfig")
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("hash_alg", &self.hash_alg)
+            .field("resize_filter", &debug_filter_type(&self.resize_filter))
+            .field("gauss_sigmas", &self.gauss_sigmas)
+            .field("use_dct", &self.dct)
+            .finish()
     }
 }
 
@@ -621,6 +640,18 @@ enum SerdeFilterType {
     CatmullRom,
     Gaussian,
     Lanczos3,
+}
+
+fn debug_filter_type(ft: &FilterType) -> &'static str {
+    use FilterType::*;
+
+    match *ft {
+        Triangle => "Triangle",
+        Nearest => "Nearest",
+        CatmullRom => "CatmullRom",
+        Lanczos3 => "Lanczos3",
+        Gaussian => "Gaussian",
+    }
 }
 
 /*
