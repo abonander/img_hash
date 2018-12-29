@@ -8,6 +8,7 @@ use rustdct::{DCTplanner, Type2And3 as DCT2};
 use criterion::{Criterion, Fun};
 
 use std::cmp;
+use std::ops::{Deref, DerefMut};
 
 struct StepIter {
     curr: usize,
@@ -51,7 +52,7 @@ fn transpose_safe(width: usize, height: usize, input: &[f32], output: &mut [f32]
     }
 }
 
-const BLOCK_SIZE: usize = 16;
+const BLOCK_SIZE: usize = 8;
 
 #[inline(always)]
 unsafe fn transpose_block<T: Copy>(input: &[T], output: &mut [T], width: usize, height: usize, block_x: usize, block_y: usize) {
@@ -162,9 +163,47 @@ where Ft: Fn(usize, usize, &[f32], &mut [f32]) {
     transpose(width, height, &scratch, signal);
 }
 
+#[derive(Debug)]
+struct AlignedVec {
+    vec: Vec<f32>,
+    start: usize,
+    end: usize,
+}
+
+impl AlignedVec {
+    pub fn new(len: usize) -> Self {
+        let vec = vec![0.; len + 16];
+        let start = (64 - vec.as_ptr() as usize % 64) / 4;
+        AlignedVec {
+            vec, start, end: start + len,
+        }
+    }
+
+    pub fn unaligned(len: usize) -> Self {
+        AlignedVec {
+            vec: vec![0.; len], start: 0, end: len
+        }
+    }
+}
+
+impl Deref for AlignedVec {
+    type Target = [f32];
+
+    fn deref(&self) -> &[f32] {
+        &self.vec[self.start .. self.end]
+    }
+}
+
+impl DerefMut for AlignedVec {
+    fn deref_mut(&mut self) -> &mut [f32] {
+        &mut self.vec[self.start .. self.end]
+    }
+}
+
 fn bench_transposes(criterion: &mut Criterion) {
-    fn gen_data(width: usize, height: usize) -> Vec<f32> {
-        (0 .. width * height).map(|x| x as f32).collect()
+    fn fill_data(width: usize, height: usize, out: &mut [f32]) {
+        (0 .. height).flat_map(|y| (0 .. width).map(move |x| x as f32 * y as f32))
+            .zip(out).for_each(|(val, out)| *out = val);
     }
 
     let dimensions = [
@@ -178,31 +217,57 @@ fn bench_transposes(criterion: &mut Criterion) {
 
 
     for &[width, height] in &dimensions {
-        let mut planner = DCTplanner::new();
-        let mut planner2 = DCTplanner::new();
+        let mut aligned = AlignedVec::new(width * height);
+        fill_data(width, height, &mut aligned);
+
+        let mut unaligned = AlignedVec::unaligned(width * height);
+        fill_data(width, height, &mut unaligned);
 
         let fns = vec![
-            Fun::new("Safe Transpose", move |b, _| {
-                let row_dct = planner.plan_dct2(width);
-                let col_dct = planner.plan_dct2(height);
-
+            Fun::new("Safe Transpose", move |b, data: &AlignedVec| {
                 b.iter_with_setup(
-                    || gen_data(width, height),
-                    |mut data| dct_2d(&*row_dct, &*col_dct, &mut data, width, height, transpose_safe)
+                    || AlignedVec::new(width * height),
+                    |mut out| {
+                        transpose_safe(width, height, &data, &mut out);
+                        out
+                    }
                 )
             }),
-            Fun::new("Unsafe Transpose", move |b, _| {
-                let row_dct = planner2.plan_dct2(width);
-                let col_dct = planner2.plan_dct2(height);
-
+            Fun::new("Unsafe Transpose", move |b, data: &AlignedVec| {
                 b.iter_with_setup(
-                    || gen_data(width, height),
-                    |mut data| dct_2d(&*row_dct, &*col_dct, &mut data, width, height, transpose_unsafe)
+                    || AlignedVec::new(width * height),
+                    |mut out| {
+                        transpose_unsafe(width, height, &data, &mut out);
+                        out
+                    }
                 )
             })
         ];
 
-        criterion.bench_functions(&format!("RustDCT {}x{}", width, height), fns, ());
+        criterion.bench_functions(&format!("RustDCT {}x{} (aligned)", width, height), fns, aligned);
+
+        let fns = vec![
+            Fun::new("Safe Transpose", move |b, data: &AlignedVec| {
+                b.iter_with_setup(
+                    || AlignedVec::unaligned(width * height),
+                    |mut out| {
+                        transpose_safe(width, height, &data, &mut out);
+                        out
+                    }
+                )
+            }),
+            Fun::new("Unsafe Transpose", move |b, data: &AlignedVec| {
+                b.iter_with_setup(
+                    || AlignedVec::unaligned(width * height),
+                    |mut out| {
+                        transpose_unsafe(width, height, &data, &mut out);
+                        out
+                    }
+                )
+            })
+        ];
+
+        criterion.bench_functions(&format!("RustDCT {}x{} (unaligned)", width, height), fns, unaligned);
     }
 }
 
