@@ -44,6 +44,8 @@ extern crate serde;
 
 pub extern crate image;
 
+extern crate rustdct;
+
 use serde::{Serialize, Deserialize};
 
 use image::{DynamicImage, GenericImageView, GrayImage, ImageBuffer, Pixel};
@@ -61,6 +63,8 @@ mod dct;
 #[cfg(feature = "bench")]
 #[allow(missing_docs)]
 pub mod dct;
+
+use dct::DctCtxt;
 
 mod alg;
 
@@ -246,9 +250,7 @@ impl HasherConfig<Box<[u8]>> {
     pub fn new() -> Self {
         Self::with_bytes_type()
     }
-}
 
-impl<B: HashBytes> HasherConfig<B> {
     /// Construct a new config with the selected [`HashBytes`](::HashBytes) impl.
     ///
     /// You may opt for an array type which allows inline allocation of hash data.
@@ -267,7 +269,9 @@ impl<B: HashBytes> HasherConfig<B> {
             _bytes_type: PhantomData,
         }
     }
+}
 
+impl<B: HashBytes> HasherConfig<B> {
     /// Set a new hash width and height; these can be the same.
     ///
     /// The number of bits in the resulting hash will be `width * height`. If you are using
@@ -371,9 +375,6 @@ impl<B: HashBytes> HasherConfig<B> {
 
     /// Create a [`Hasher`](Hasher) from this config which can be used to hash images.
     ///
-    /// If DCT preprocessing was selected, this will precalculate the DCT coefficients for the
-    /// chosen hash size.
-    ///
     /// ### Panics
     /// If the chosen hash size (`width x height`, rounded for the algorithm if necessary)
     /// is too large for the chosen container type (`B::max_bits()`).
@@ -389,14 +390,15 @@ impl<B: HashBytes> HasherConfig<B> {
         let dct_coeffs = if dct && hash_alg != HashAlg::Blockhash {
             // calculate the coefficients based on the resize dimensions
             let (dct_width, dct_height) = hash_alg.resize_dimensions(width, height);
-            Some(dct::Coefficients::precompute(dct_width, dct_height))
+            Some(DctCtxt::new(dct_width, dct_height))
         } else {
             None
         };
 
         Hasher {
             ctxt: HashCtxt {
-                gauss_sigmas, dct_coeffs, width, height, resize_filter,
+                gauss_sigmas,
+                dct_ctxt: dct_coeffs, width, height, resize_filter,
             },
             hash_alg,
             bytes_type: PhantomData
@@ -429,7 +431,6 @@ pub struct Hasher<B = Box<[u8]>> {
 }
 
 impl<B> Hasher<B> where B: HashBytes {
-
     /// Calculate a hash for the given image with the configured options.
     pub fn hash_image<I: Image>(&self, img: &I) -> ImageHash<B> {
         let hash = self.hash_alg.hash_image(&self.ctxt, img);
@@ -459,13 +460,15 @@ enum HashVals {
 // TODO: implement `Debug`, needs adaptor for `FilterType`
 struct HashCtxt {
     gauss_sigmas: Option<[f32; 2]>,
-    dct_coeffs: Option<dct::Coefficients>,
+    dct_ctxt: Option<DctCtxt>,
     resize_filter: FilterType,
     width: u32,
     height: u32,
 }
 
 impl HashCtxt {
+
+    /// If Difference of Gaussians preprocessing is configured, produce a new image with it applied.
     fn gauss_preproc<'a, I: Image>(&self, image: &'a I) -> CowImage<'a, I> {
         if let Some([sigma_a, sigma_b]) = self.gauss_sigmas {
             let mut blur_a = image.blur(sigma_a);
@@ -478,18 +481,17 @@ impl HashCtxt {
         }
     }
 
+    /// If DCT preprocessing is configured, produce a vector of floats, otherwise a vector of bytes.
     fn calc_hash_vals(&self, img: &GrayImage, width: u32, height: u32) -> HashVals {
-        if let Some(ref coeffs) = self.dct_coeffs {
-            let width = width * dct::SIZE_MULTIPLIER;
-
-            let img = imageops::resize(img, width, height * dct::SIZE_MULTIPLIER,
+        if let Some(ref dct_ctxt) = self.dct_ctxt {
+            let img = imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(),
                                        self.resize_filter);
 
             let img_vals: Vec<f32> = img.into_vec().into_iter()
                 .map(|x| x as f32 / 255 as f32).collect();
 
-            let hash_vals = dct::dct_2d(&img_vals, width as usize, coeffs);
-            HashVals::Floats(dct::crop_2d_dct(hash_vals, width as usize))
+            let hash_vals = dct_ctxt.dct_2d(img_vals);
+            HashVals::Floats(dct_ctxt.crop_2d(hash_vals))
         } else {
             let img = imageops::resize(img, width, height, self.resize_filter);
             HashVals::Bytes(img.into_vec())
