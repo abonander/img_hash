@@ -36,7 +36,6 @@
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
 extern crate base64;
-extern crate num_traits;
 
 #[macro_use]
 extern crate serde;
@@ -63,6 +62,9 @@ mod dct;
 #[cfg(feature = "bench")]
 #[allow(missing_docs)]
 pub mod dct;
+
+#[cfg(feature = "demo")]
+pub mod demo;
 
 use dct::DctCtxt;
 
