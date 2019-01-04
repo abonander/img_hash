@@ -7,103 +7,12 @@
 // except according to those terms.
 
 use rustdct::{DCTplanner, Type2And3};
+use transpose::transpose;
+
 use std::sync::Arc;
 
 pub const SIZE_MULTIPLIER: u32 = 2;
 pub const SIZE_MULTIPLIER_U: usize = SIZE_MULTIPLIER as usize;
-
-const BLOCK_SIZE: usize = 16;
-
-#[inline(always)]
-unsafe fn transpose_block<T: Copy>(input: &[T], output: &mut [T], width: usize, height: usize, block_x: usize, block_y: usize) {
-    for inner_x in 0..BLOCK_SIZE {
-        for inner_y in 0..BLOCK_SIZE {
-            let x = block_x * BLOCK_SIZE + inner_x;
-            let y = block_y * BLOCK_SIZE + inner_y;
-
-            let input_index = x + y * width;
-            let output_index = y + x * height;
-
-            *output.get_unchecked_mut(output_index) = *input.get_unchecked(input_index);
-        }
-    }
-}
-
-#[inline(always)]
-unsafe fn transpose_endcap_block<T: Copy>(input: &[T], output: &mut [T], width: usize, height: usize, block_x: usize, block_y: usize, block_width: usize, block_height: usize) {
-    for inner_x in 0..block_width {
-        for inner_y in 0..block_height {
-            let x = block_x * BLOCK_SIZE + inner_x;
-            let y = block_y * BLOCK_SIZE + inner_y;
-
-            let input_index = x + y * width;
-            let output_index = y + x * height;
-
-            *output.get_unchecked_mut(output_index) = *input.get_unchecked(input_index);
-        }
-    }
-}
-
-/// Given an array of size width * height, representing a flattened 2D array,
-/// transpose the rows and columns of that 2D array into the output
-// Use "Loop tiling" to improve cache-friendliness
-pub fn transpose<T: Copy>(width: usize, height: usize, input: &[T], output: &mut [T]) {
-    assert_eq!(width*height, input.len());
-    assert_eq!(width*height, output.len());
-
-    let x_block_count = width / BLOCK_SIZE;
-    let y_block_count = height / BLOCK_SIZE;
-
-    let remainder_x = width - x_block_count * BLOCK_SIZE;
-    let remainder_y = height - y_block_count * BLOCK_SIZE;
-
-    for y_block in 0..y_block_count {
-        for x_block in 0..x_block_count {
-            unsafe {
-                transpose_block(
-                    input, output,
-                    width, height,
-                    x_block, y_block);
-            }
-        }
-
-        //if the width is not cleanly divisible by block_size, there are still a few columns that haven't been transposed
-        if remainder_x > 0 {
-            unsafe {
-                transpose_endcap_block(
-                    input, output,
-                    width, height,
-                    x_block_count, y_block,
-                    remainder_x, BLOCK_SIZE);
-            }
-        }
-    }
-
-    //if the height is not cleanly divisible by BLOCK_SIZE, there are still a few columns that haven't been transposed
-    if remainder_y > 0 {
-        for x_block in 0..x_block_count {
-            unsafe {
-                transpose_endcap_block(
-                    input, output,
-                    width, height,
-                    x_block, y_block_count,
-                    BLOCK_SIZE, remainder_y,
-                );
-            }
-        }
-
-        //if the width is not cleanly divisible by block_size, there are still a few columns that haven't been transposed
-        if remainder_x > 0 {
-            unsafe {
-                transpose_endcap_block(
-                    input, output,
-                    width, height,
-                    x_block_count, y_block_count,
-                    remainder_x, remainder_y);
-            }
-        }
-    }
-}
 
 pub struct DctCtxt {
     row_dct: Arc<Type2And3<f32>>,
@@ -136,37 +45,47 @@ impl DctCtxt {
 
     /// Perform a 2D DCT on a 1D-packed vector with a given `width x height`.
     ///
+    /// Assumes `packed_2d` is double-length for scratch space. Returns the vector truncated to
+    /// `width * height`.
+    ///
     /// ### Panics
-    /// If `self.width * self.height != packed_2d.len()`
+    /// If `self.width * self.height * 2 != packed_2d.len()`
     pub fn dct_2d(&self, mut packed_2d: Vec<f32>) -> Vec<f32> {
         let Self { ref row_dct, ref col_dct, width, height } = *self;
 
-        assert_eq!(width * height, packed_2d.len());
-        let mut scratch = vec![0f32; packed_2d.len()];
+        let trunc_len = width * height;
+        assert_eq!(trunc_len * 2, packed_2d.len());
 
-        for (row_in, row_out) in packed_2d.chunks_mut(width)
-            .zip(scratch.chunks_mut(width)) {
-            row_dct.process_dct2(row_in, row_out);
+        {
+            let (packed_2d, scratch) = packed_2d.split_at_mut(trunc_len);
+
+            for (row_in, row_out) in packed_2d.chunks_mut(width)
+                .zip(scratch.chunks_mut(width)) {
+                row_dct.process_dct2(row_in, row_out);
+            }
+
+            transpose(scratch, packed_2d, width, height);
+
+            for (row_in, row_out) in packed_2d.chunks_mut(height)
+                .zip(scratch.chunks_mut(height)) {
+                col_dct.process_dct2(row_in, row_out);
+            }
+
+            transpose(scratch, packed_2d, width, height);
         }
 
-        transpose(width, height, &scratch, &mut packed_2d);
-
-        for (row_in, row_out) in packed_2d.chunks_mut(height)
-            .zip(scratch.chunks_mut(height)) {
-            col_dct.process_dct2(row_in, row_out);
-        }
-
-        transpose(width, height, &scratch, &mut packed_2d);
-
+        packed_2d.truncate(trunc_len);
         packed_2d
     }
 
-    pub fn crop_2d(&self, mut packed: Vec<f32>) -> Vec<f32> {
+    pub fn crop_2d(&self, packed: Vec<f32>) -> Vec<f32> {
         crop_2d_dct(packed, self.width)
     }
 }
 
-/// Crop the values off a 1D-packed 2D DCT
+/// Crop the values off a 1D-packed 2D DCT.
+///
+/// Returns `packed` truncated to the premultiplied size, as determined by `rowstride`
 ///
 /// Generic for easier testing
 fn crop_2d_dct<T: Copy>(mut packed: Vec<T>, rowstride: usize) -> Vec<T> {

@@ -44,6 +44,7 @@ extern crate serde;
 pub extern crate image;
 
 extern crate rustdct;
+extern crate transpose;
 
 use serde::{Serialize, Deserialize};
 
@@ -466,7 +467,6 @@ struct HashCtxt {
 }
 
 impl HashCtxt {
-
     /// If Difference of Gaussians preprocessing is configured, produce a new image with it applied.
     fn gauss_preproc<'a, I: Image>(&self, image: &'a I) -> CowImage<'a, I> {
         if let Some([sigma_a, sigma_b]) = self.gauss_sigmas {
@@ -486,10 +486,18 @@ impl HashCtxt {
             let img = imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(),
                                        self.resize_filter);
 
-            let img_vals: Vec<f32> = img.into_vec().into_iter()
-                .map(|x| x as f32 / 255 as f32).collect();
+            let img_vals  = img.into_vec();
+            let input_len = img_vals.len() * 2;
 
-            let hash_vals = dct_ctxt.dct_2d(img_vals);
+            let mut vals_with_scratch = Vec::with_capacity(input_len);
+
+            // put the image values in [0, 1] in [..width * height] and provide scratch space
+            // this actually optimizes better than a lookup table, see `benches/byte_to_float.rs`
+            vals_with_scratch.extend(img_vals.into_iter().map(|x| x as f32 / 255 as f32));
+            // TODO: compare with `.set_len()`
+            vals_with_scratch.resize(input_len, 0.);
+
+            let hash_vals = dct_ctxt.dct_2d(vals_with_scratch);
             HashVals::Floats(dct_ctxt.crop_2d(hash_vals))
         } else {
             let img = imageops::resize(img, width, height, self.resize_filter);
