@@ -646,14 +646,9 @@ impl Image for DynamicImage {
 impl Image for GrayImage {
     // type Buf = GrayImage;
 
+    // Avoids copying
     fn to_grayscale(&self) -> Cow<GrayImage> {
         Cow::Borrowed(self)
-    }
-
-    fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
-
-    fn foreach_pixel8<F>(&self, mut foreach: F) where F: FnMut(u32, u32, &[u8]) {
-        self.enumerate_pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
     }
 }
 
