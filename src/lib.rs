@@ -97,7 +97,9 @@ pub trait HashBytes {
 
 impl HashBytes for Box<[u8]> {
     fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self {
-        iter.collect()
+        // stable in 1.32, effectively the same thing
+        // iter.collect()
+        iter.collect::<Vec<u8>>().into_boxed_slice()
     }
 
     fn max_bits() -> usize {
@@ -590,6 +592,7 @@ pub trait DiffImage {
     fn diff_inplace(&mut self, other: &Self);
 }
 
+#[cfg(not(feature = "nightly"))]
 impl<P: 'static, C: 'static> Image for ImageBuffer<P, C> where P: Pixel<Subpixel = u8>, C: ops::Deref<Target=[u8]> {
     type Buf = ImageBuffer<P, Vec<u8>>;
 
@@ -600,6 +603,21 @@ impl<P: 'static, C: 'static> Image for ImageBuffer<P, C> where P: Pixel<Subpixel
     fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
 
     fn foreach_pixel8<F>(&self, mut foreach: F) where F: FnMut(u32, u32, &[u8]) {
+        self.enumerate_pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
+    }
+}
+
+#[cfg(feature = "nightly")]
+impl<P: 'static, C: 'static> Image for ImageBuffer<P, C> where P: Pixel<Subpixel = u8>, C: ops::Deref<Target=[u8]> {
+    type Buf = ImageBuffer<P, Vec<u8>>;
+
+    default fn to_grayscale(&self) -> Cow<GrayImage> {
+        Cow::Owned(imageops::grayscale(self))
+    }
+
+    default fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
+
+    default fn foreach_pixel8<F>(&self, mut foreach: F) where F: FnMut(u32, u32, &[u8]) {
         self.enumerate_pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
     }
 }
@@ -626,7 +644,7 @@ impl Image for DynamicImage {
 
 #[cfg(feature = "nightly")]
 impl Image for GrayImage {
-    type Buf = Self;
+    // type Buf = GrayImage;
 
     fn to_grayscale(&self) -> Cow<GrayImage> {
         Cow::Borrowed(self)
