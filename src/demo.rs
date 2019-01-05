@@ -8,6 +8,7 @@ use image::{DynamicImage, gif};
 use std::env;
 use std::fs::{self, File};
 use std::path::PathBuf;
+use std::process;
 
 pub struct DemoCtxt {
     pub image: DynamicImage,
@@ -26,17 +27,18 @@ impl DemoCtxt {
         let args = env::args().collect::<Vec<_>>();
 
         if args.len() != 5 {
-            return Err(format!("\
-                usage: {name} [FILE] [OUTPUT-DIR] [WIDTH] [HEIGHT]\n\
-                demos `{alg}` for FILE, exporting gifs of each step to OUTPUT-DIR\n\
-                each gif will be WIDTH x HEIGHT in size; the hash config is fixed\n\
-          ", name = name, alg = alg));
+            println!("\
+                usage: {name} [FILE] [OUTPUT-DIR] [WIDTH] [HEIGHT]\r\n\
+                demos `{alg}` for FILE, exporting gifs of each step to OUTPUT-DIR\r\n\
+                each gif will be WIDTH x HEIGHT in size; the hash config is fixed\r\n\
+             ", name = name, alg = alg);
+            process::exit(0);
         }
 
         let file = &args[1];
         let output = &args[2];
-        let width = args[3].parse::<u32>().map_err(explain!("could not parse WIDTH: {}", args[3]))?;
-        let height = args[4].parse::<u32>().map_err(explain!("could not parse HEIGHT: {}", args[4]))?;
+        let width = args[3].parse().map_err(explain!("could not parse WIDTH: {}", args[3]))?;
+        let height = args[4].parse().map_err(explain!("could not parse HEIGHT: {}", args[4]))?;
 
         let image = image::open(file).map_err(explain!("failed to open {}", file))?;
 
@@ -51,12 +53,13 @@ impl DemoCtxt {
     }
 
     /// Save the frame set as a gif with the given name, without extension
-    pub fn save_gif(&self, name: &str, frames: image::Frames) -> Result<(), String> {
+    pub fn save_gif(&self, name: &str, frames: Vec<image::Frame>) -> Result<(), String> {
         let path = self.output_dir.join(name).with_extension(".gif");
-        let file = fs::File::create(&path).map_err(explain!("failed to create {}", path.display()));
+        let file = fs::File::create(&path)
+            .map_err(explain!("failed to create {}", path.display()))?;
 
         let mut encoder = gif::Encoder::new(file);
-        encoder.encode_frames(frames)
+        encoder.encode_frames(image::Frames::new(frames))
             .map_err(explain!("failed to write gif frames to {}", path.display()))
     }
 }
