@@ -3,13 +3,15 @@
 //! NOTE: not considered part of the crate's stable API
 #![allow(missing_docs)]
 
-use image::DynamicImage;
+use image::{DynamicImage, gif};
 
-use std::{env, fs, process};
+use std::env;
+use std::fs::{self, File};
+use std::path::PathBuf;
 
-pub struct DemoConfig {
+pub struct DemoCtxt {
     pub image: DynamicImage,
-    pub output_dir: String,
+    pub output_dir: PathBuf,
     pub width: u32,
     pub height: u32,
 }
@@ -19,8 +21,8 @@ macro_rules! explain {
     ($($arg:tt)*) => { |e| format!("{}: {}", format_args!($($arg)*), e) }
 }
 
-impl DemoConfig {
-    pub fn init(name: &str, alg: &str) -> Result<DemoConfig, String> {
+impl DemoCtxt {
+    pub fn init(name: &str, alg: &str) -> Result<DemoCtxt, String> {
         let args = env::args().collect::<Vec<_>>();
 
         if args.len() != 5 {
@@ -38,11 +40,23 @@ impl DemoConfig {
 
         let image = image::open(file).map_err(explain!("failed to open {}", file))?;
 
-        let output_dir = fs::create_dir_all(output)
-            .map_err(explain!("failed to create output dir {}", output));
+        fs::create_dir_all(output).map_err(explain!("failed to create output dir {}", output));
+
+        Ok(Self {
+            image,
+            output_dir: output.into(),
+            width,
+            height
+        })
     }
 
-    pub fn open_output_file(&self, name: &str) -> Result<fs::File, String> {
+    /// Save the frame set as a gif with the given name, without extension
+    pub fn save_gif(&self, name: &str, frames: image::Frames) -> Result<(), String> {
+        let path = self.output_dir.join(name).with_extension(".gif");
+        let file = fs::File::create(&path).map_err(explain!("failed to create {}", path.display()));
 
+        let mut encoder = gif::Encoder::new(file);
+        encoder.encode_frames(frames)
+            .map_err(explain!("failed to write gif frames to {}", path.display()))
     }
 }
