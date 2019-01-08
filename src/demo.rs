@@ -10,11 +10,9 @@ use self::interpolation::*;
 
 use std::env;
 use std::fs::{self, File};
+use std::io::BufWriter;
 use std::path::PathBuf;
 use std::process;
-
-// should come out to ~26 FPS
-const FRAME_DELAY: u16 = 4;
 
 pub struct DemoCtxt {
     pub image: RgbaImage,
@@ -70,16 +68,16 @@ impl DemoCtxt {
         let file = fs::File::create(&path)
             .map_err(explain!("failed to create {}", path.display()))?;
 
-        let mut encoder = gif::Encoder::new(file);
+        let mut encoder = gif::Encoder::new(BufWriter::new(file));
         encoder.encode_frames(Frames::new(frames))
             .map_err(explain!("failed to write gif frames to {}", path.display()))
     }
 
-    pub fn animate_grayscale(&self, i: &RgbaImage, frame_cnt: u32, on_frame: fn(u32)) -> Vec<Frame> {
+    pub fn animate_grayscale(&self, i: &RgbaImage, frame_cnt: u32, frame_delay: u16) -> Vec<Frame> {
         let (width, height) = self.resize_dimensions(i);
         let resized = imageops::resize(i, width, height, Lanczos3);
 
-        frame_iter(frame_cnt, on_frame).map(|f| {
+        frame_iter(frame_cnt).map(|f| {
             Frame::from_parts(RgbaImage::from_fn(width, height, |x, y| {
                 let mut px = resized.get_pixel(x, y).clone();
 
@@ -91,18 +89,20 @@ impl DemoCtxt {
                 px.blend(&desat.to_rgba());
 
                 px
-            }), 0, 0, FRAME_DELAY.into())
+            }), 0, 0, frame_delay.into())
         }).collect()
     }
 
-    pub fn animate_resize(&self, i: &RgbaImage, frame_cnt: u32, on_frame: fn(u32)) -> Vec<Frame> {
+    pub fn animate_resize(&self, i: &RgbaImage, rwidth: u32, rheight: u32, frame_cnt: u32,
+                          frame_delay: u16) -> Vec<Frame> {
         let (width, height) = i.dimensions();
 
-        let mut frames: Vec<_> = frame_iter(frame_cnt, on_frame).map(|f| {
+        let mut frames: Vec<_> = frame_iter(frame_cnt).map(|f| {
             let mut frame = RgbaImage::from_pixel(width, height,
                                                   Rgba::from_channels(255, 255, 255, 255));
 
-            let [nwidth, nheight] = lerp(&[width as f32, height as f32], &[8., 8.], &f);
+            let [nwidth, nheight] = lerp(&[width as f32, height as f32],
+                                         &[rwidth as f32, rheight as f32], &f);
             let (nwidth, nheight) = (nwidth as u32, nheight as u32);
             // offset so the image shrinks toward center
             let left = width / 2 - (nwidth / 2);
@@ -111,7 +111,7 @@ impl DemoCtxt {
             let resized = imageops::resize(i, nwidth, nheight, Lanczos3);
             imageops::overlay(&mut frame, &resized, left, top);
 
-            Frame::from_parts(frame, 0, 0, FRAME_DELAY.into())
+            Frame::from_parts(frame, 0, 0, frame_delay.into())
         }).collect();
 
         // blow up the final frame using Nearest filter so we can see the individual pixels
@@ -125,6 +125,6 @@ impl DemoCtxt {
     }
 }
 
-fn frame_iter(frame_cnt: u32, on_frame: fn(u32)) -> impl Iterator<Item = f32> {
-    (0 ..= frame_cnt).map(move |f| { on_frame(f); f as f32 / frame_cnt as f32 })
+fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
+    (0 ..= frame_cnt).map(move |f| f as f32 / frame_cnt as f32)
 }
