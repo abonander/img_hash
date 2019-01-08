@@ -1,18 +1,19 @@
 extern crate image;
 extern crate img_hash;
 extern crate rayon;
+extern crate rusttype;
 
-use img_hash::demo::DemoCtxt;
-use image::{imageops, ImageBuffer, RgbaImage, Rgba, Pixel, Frame, Lanczos3, Nearest};
-
-use std::error::Error;
-use std::env;
-use std::fmt;
-use std::fs;
-use std::thread;
+use img_hash::demo::*;
+use image::*;
+use rusttype::{Scale, Point};
 
 const HASH_WIDTH: u32 = 9;
 const HASH_HEIGHT: u32 = 8;
+
+const WHITE_A: Rgba<u8> = Rgba { data: [255; 4] };
+const BLACK: Rgb<u8> = Rgb{ data: [0, 0, 0 ] };
+const RED: Rgb<u8> = Rgb { data: [255, 0, 0] };
+const GREEN: Rgb<u8> = Rgb { data: [0, 255, 0] };
 
 macro_rules! handle(
     ($try:expr) => {
@@ -70,8 +71,7 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
 
     let gif_height = ctxt.width / 2;
 
-    let mut background = ImageBuffer::from_pixel(ctxt.width, gif_height,
-                                                 Rgba::from_channels(255, 255, 255, 255));
+    let mut background = ImageBuffer::from_pixel(ctxt.width, gif_height, WHITE_A);
 
     // half the width with 10% padding
     let resize_width = (ctxt.width / 2 * 9) / 10;
@@ -112,9 +112,12 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
         let y_in_outline = y < outline_lower_y || y > outline_upper_y;
 
         let alpha = if x_in_outline || y_in_outline { 255 } else { 0 };
-        // red outline
-        Rgba::from_channels(255, 0, 0, alpha)
+        let mut color = RED.to_rgba();
+        color[3] = alpha;
+        color
     });
+
+    let mut bitstring = Bitstring::new();
 
     // we touch HASH_HEIGHT * (HASH_WIDTH - 1) pixels
     (0 .. HASH_HEIGHT).flat_map(|y| (0 .. HASH_WIDTH - 1).map(move |x| (x, y)))
@@ -131,14 +134,37 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             let left_pixel = ImageBuffer::from_pixel(pixel_width, pixel_height, left);
             let right_pixel = ImageBuffer::from_pixel(pixel_width, pixel_height, right);
 
-            // position the left pixel in the third quarter of the image's width
-            let left_pixel_x = ctxt.width / 4 * 3;
-            let right_pixel_x = left_pixel_x + (pixel_width * 2);
+            let bit = left.to_luma()[0] > right.to_luma()[0];
 
+            // position the left pixel in the second third of the image's width
+            let left_pixel_x = ctxt.width / 3 * 2;
+            let right_pixel_x = left_pixel_x + (pixel_width * 2);
             let pixel_y = gif_height / 4;
+
+            // between the two pixels draw either `<` or `>`
+            let comp = if bit { '>' } else { '⩽' };
+            bitstring.push_bit(bit);
+
+            let bit_color = if bit { GREEN } else { RED };
+
+            let comp_glyph = center_in_area(
+                ctxt.font.glyph(comp)
+                .scaled(Scale { x: pixel_width as f32, y: pixel_height as f32 })
+                .positioned(Point { x: (left_pixel_x + pixel_width) as f32, y: pixel_y as f32 }),
+                pixel_width, pixel_height);
 
             imageops::overlay(&mut frame, &left_pixel, left_pixel_x, pixel_y);
             imageops::overlay(&mut frame, &right_pixel, right_pixel_x, pixel_y);
+
+            draw_glyph(&mut frame, &comp_glyph, &bit_color);
+
+            let string_x = ctxt.width / 2 * 11 / 10;
+            let string_y = gif_height * 3 / 4;
+            ctxt.layout_text(bitstring.as_str(), string_x, string_y).enumerate()
+                .for_each(|(i, g)| {
+                    let color = if i + 1 == bitstring.as_str().len() { bit_color } else { BLACK };
+                    draw_glyph(&mut frame, &g, &color)
+                });
 
             // run faster after the first couple rows
             let delay = if y < 2 { 50 } else { 8 };

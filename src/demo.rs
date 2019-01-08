@@ -4,12 +4,14 @@
 #![allow(missing_docs)]
 
 extern crate interpolation;
+extern crate rusttype;
 
 use image::{self, *};
 use self::interpolation::*;
+use self::rusttype::*;
 
 use std::env;
-use std::fs::{self, File};
+use std::fs;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use std::process;
@@ -18,7 +20,10 @@ pub struct DemoCtxt {
     pub image: RgbaImage,
     pub output_dir: PathBuf,
     pub width: u32,
+    pub font: Font<'static>,
 }
+
+const DEMO_FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
 
 #[macro_export]
 macro_rules! explain {
@@ -27,6 +32,8 @@ macro_rules! explain {
 
 impl DemoCtxt {
     pub fn init(name: &str, alg: &str) -> Result<DemoCtxt, String> {
+        let font = Font::from_bytes(DEMO_FONT).expect("failed to read font");
+
         let args = env::args().collect::<Vec<_>>();
 
         if args.len() != 4 {
@@ -51,6 +58,7 @@ impl DemoCtxt {
             image: image.to_rgba(),
             output_dir: output.into(),
             width,
+            font,
         })
     }
 
@@ -60,6 +68,10 @@ impl DemoCtxt {
         let resize_ratio = self.width as f32 / width as f32;
         let nheight = (height as f32 * resize_ratio) as u32;
         (self.width, nheight)
+    }
+
+    pub fn text_scale(&self) -> Scale {
+        Scale::uniform(self.width as f32 / 20.)
     }
 
     /// Save the frame set as a gif with the given name, without extension
@@ -123,8 +135,61 @@ impl DemoCtxt {
 
         frames
     }
+
+    pub fn layout_text<'a, 'b>(&'a self, text: &'b str, x: u32, y: u32) -> LayoutIter<'a, 'b> {
+        self.font.layout(text, self.text_scale(), Point { x: x as f32, y: y as f32 })
+    }
 }
 
 fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
     (0 ..= frame_cnt).map(move |f| f as f32 / frame_cnt as f32)
+}
+
+pub fn draw_glyph(buf: &mut RgbaImage, glyph: &PositionedGlyph, color: &Rgb<u8>) {
+    let Point { x, y } = glyph.position();
+    let (pos_x, pos_y) = (x as u32, y as u32);
+
+    // this doesn't provide offsets from the glyph position
+    glyph.draw(|x, y, a| {
+        let mut rgba = color.to_rgba();
+        rgba[3] = (a * 255.) as u8;
+        buf.get_pixel_mut(pos_x + x, pos_y + y).blend(&rgba);
+    })
+}
+
+pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> PositionedGlyph {
+    let Point { x, y } = glyph.position();
+    let (x, y) = (x as u32, y as u32);
+
+    let bounding_box = glyph.pixel_bounding_box().expect("need pixel bounding box to center");
+    let Vector { x: gwidth, y: gheight } = bounding_box.max - bounding_box.min;
+    let (gwidth, gheight) = (gwidth as u32, gheight as u32);
+    assert!(gwidth <= width);
+    assert!(gheight <= height);
+
+    let new_x = x + (width - gwidth) / 2;
+    let new_y = y + (width - gheight) / 2;
+
+    glyph.into_unpositioned().positioned(Point { x: new_x as f32, y: new_y as f32 })
+}
+
+// at bitstring lengths above this value, ellipsize the middle
+pub const MAX_BITSTR_LEN: usize = 16;
+const ELLIPSIS_START: usize = 6;
+const ELLIPSIS_PAT: &str = "[...]";
+
+pub struct Bitstring(String);
+
+impl Bitstring {
+    pub fn new() -> Self { Bitstring(String::new()) }
+    pub fn push_bit(&mut self, bit: bool) {
+        self.0.push(if bit { '1' } else { '0' });
+        if self.0.len() > MAX_BITSTR_LEN {
+            let end = ELLIPSIS_START + ELLIPSIS_PAT.len();
+            // clip the `end`th bit out of the string so it doesn't get longer
+            self.0.replace_range(ELLIPSIS_START ..= end, ELLIPSIS_PAT);
+        }
+    }
+
+    pub fn as_str(&self) -> &str { &self.0 }
 }
