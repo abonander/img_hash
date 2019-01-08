@@ -193,3 +193,43 @@ impl Bitstring {
 
     pub fn as_str(&self) -> &str { &self.0 }
 }
+
+pub struct Outline {
+    pub inner_width: u32,
+    pub inner_height: u32,
+    pub thickness: u32,
+}
+
+impl Outline {
+    pub fn new(inner_width: u32, inner_height: u32, thickness: u32) -> Self {
+        Outline { inner_width, inner_height, thickness }
+    }
+
+    pub fn draw(&self, i: &mut RgbaImage, x: u32, y: u32, color: Rgb<u8>) {
+        let Outline { inner_width, inner_height, thickness } = *self;
+
+        let outer_width = inner_width + thickness * 2;
+        let outer_height = inner_height + thickness * 2;
+
+        // draw the outline for pixels where:
+        // `x` is less than the former or greater than the latter, OR
+        let lower_x = x + thickness;
+        let upper_x = x + outer_width - thickness;
+        let max_x = x + outer_width;
+
+        // `y` is less than the former or greater than the latter
+        let lower_y = y + thickness;
+        let upper_y = y + outer_height - thickness;
+        let max_y = y + outer_height;
+
+        (y .. lower_y).chain(upper_y .. max_y)
+            .flat_map(|y| (x .. max_x).map(move |x| (x, y))) // top and bottom bars
+            .chain(
+                // left and right bars
+                (lower_y .. upper_y).flat_map(|y|
+                    (x .. lower_x).chain(upper_x .. max_x).map(move |x| (x, y))
+                )
+            )
+            .for_each(|(x, y)| i.put_pixel(x, y, color.to_rgba()))
+    }
+}

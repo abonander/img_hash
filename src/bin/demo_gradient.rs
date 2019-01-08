@@ -95,46 +95,12 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
     let pixel_width = resize_width / HASH_WIDTH;
     let pixel_height = resize_height / HASH_HEIGHT;
 
-    // the inner dimensions of the outline, should encompass 2x1 of the large pixels
-    let outline_inner_width = pixel_width * 2;
-    let outline_inner_height = pixel_height;
-
-    // add 10% as the outline's thickness
-    let outline_outer_width = fmul(outline_inner_width, 1.1);
-    let outline_outer_height = fmul(outline_inner_height, 1.1);
-
-    // if `x` is less than the former or greater than the latter, AND
-    let outline_lower_x = (outline_outer_width - outline_inner_width) / 2;
-    let outline_upper_x = outline_outer_width - outline_lower_x;
-
-    // if `y` is less than the former or greater than the latter, THEN
-    let outline_lower_y = (outline_outer_height - outline_inner_height) / 2;
-    let outline_upper_y = outline_outer_height - outline_lower_y;
+    // configure an outline with 20% thickness
+    let outline = Outline::new(pixel_width * 2, pixel_height, fmul(pixel_width, 0.1));
 
     // subtract the thickness of the outline from its overall offset
-    let outline_x = overlay_x - outline_lower_x;
-    let outline_y = overlay_y - outline_lower_y;
-
-    // draw a red outline
-    let red_outline = RgbaImage::from_fn(outline_outer_width, outline_outer_height, |x, y| {
-        let x_in_outline = x < outline_lower_x || x >= outline_upper_x;
-        let y_in_outline = y < outline_lower_y || y >= outline_upper_y;
-
-        let alpha = if x_in_outline || y_in_outline { 255 } else { 0 };
-        let mut color = RED.to_rgba();
-        color[3] = alpha;
-        color
-    });
-
-    let green_outline = RgbaImage::from_fn(outline_outer_width, outline_outer_height, |x, y| {
-        let x_in_outline = x < outline_lower_x || x > outline_upper_x;
-        let y_in_outline = y < outline_lower_y || y > outline_upper_y;
-
-        let alpha = if x_in_outline || y_in_outline { 255 } else { 0 };
-        let mut color = GREEN.to_rgba();
-        color[3] = alpha;
-        color
-    });
+    let outline_x = overlay_x - outline.thickness;
+    let outline_y = overlay_y - outline.thickness;
 
     let mut bitstring = Bitstring::new();
 
@@ -150,9 +116,10 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             let right_pixel = ImageBuffer::from_pixel(pixel_width, pixel_height, right);
 
             let bit = left.to_luma()[0] > right.to_luma()[0];
+            let bit_color = if bit { GREEN } else { RED };
 
-            imageops::overlay(&mut frame, if bit { &green_outline } else { &red_outline },
-                              outline_x + pixel_width * x, outline_y + pixel_height * y);
+            outline.draw(&mut frame, outline_x + pixel_width * x, outline_y + pixel_height * y,
+                         bit_color);
 
             // position the left pixel in the second third of the image's width
             let left_pixel_x = ctxt.width / 3 * 2;
@@ -162,8 +129,6 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             // between the two pixels draw either `<` or `>`
             let comp = if bit { '>' } else { '⩽' };
             bitstring.push_bit(bit);
-
-            let bit_color = if bit { GREEN } else { RED };
 
             let comp_glyph = center_in_area(
                 ctxt.font.glyph(comp)
