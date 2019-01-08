@@ -65,6 +65,11 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
+/// Multiply a `u32` by an `f32` with a truncated result
+fn fmul(x: u32, y: f32) -> u32 {
+    (x as f32 * y) as u32
+}
+
 fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
     // the final resized image
     let resized_small = imageops::resize(grayscale, HASH_WIDTH, HASH_HEIGHT, Lanczos3);
@@ -74,7 +79,7 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
     let mut background = ImageBuffer::from_pixel(ctxt.width, gif_height, WHITE_A);
 
     // half the width with 10% padding
-    let resize_width = (ctxt.width / 2 * 9) / 10;
+    let resize_width = fmul(ctxt.width / 2, 0.9);
     // match the resize aspect ratio
     let resize_height = resize_width * HASH_HEIGHT / HASH_WIDTH;
 
@@ -95,24 +100,38 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
     let outline_inner_height = pixel_height;
 
     // add 10% as the outline's thickness
-    let outline_outer_width = outline_inner_width * 11 / 10;
-    let outline_outer_height = outline_inner_height * 11 / 10;
+    let outline_outer_width = fmul(outline_inner_width, 1.1);
+    let outline_outer_height = fmul(outline_inner_height, 1.1);
 
     // if `x` is less than the former or greater than the latter, AND
-    let outline_lower_x = outline_outer_width - outline_inner_width;
+    let outline_lower_x = (outline_outer_width - outline_inner_width) / 2;
     let outline_upper_x = outline_outer_width - outline_lower_x;
 
     // if `y` is less than the former or greater than the latter, THEN
-    let outline_lower_y = outline_outer_height - outline_inner_height;
+    let outline_lower_y = (outline_outer_height - outline_inner_height) / 2;
     let outline_upper_y = outline_outer_height - outline_lower_y;
 
+    // subtract the thickness of the outline from its overall offset
+    let outline_x = overlay_x - outline_lower_x;
+    let outline_y = overlay_y - outline_lower_y;
+
     // draw a red outline
-    let outline = RgbaImage::from_fn(outline_outer_width, outline_outer_height, |x, y| {
+    let red_outline = RgbaImage::from_fn(outline_outer_width, outline_outer_height, |x, y| {
+        let x_in_outline = x < outline_lower_x || x >= outline_upper_x;
+        let y_in_outline = y < outline_lower_y || y >= outline_upper_y;
+
+        let alpha = if x_in_outline || y_in_outline { 255 } else { 0 };
+        let mut color = RED.to_rgba();
+        color[3] = alpha;
+        color
+    });
+
+    let green_outline = RgbaImage::from_fn(outline_outer_width, outline_outer_height, |x, y| {
         let x_in_outline = x < outline_lower_x || x > outline_upper_x;
         let y_in_outline = y < outline_lower_y || y > outline_upper_y;
 
         let alpha = if x_in_outline || y_in_outline { 255 } else { 0 };
-        let mut color = RED.to_rgba();
+        let mut color = GREEN.to_rgba();
         color[3] = alpha;
         color
     });
@@ -124,10 +143,6 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
         .map(|(x, y)| {
             let mut frame = background.clone();
 
-            imageops::overlay(&mut frame, &outline,
-                              overlay_x + outline_inner_width / 2 * x,
-                              overlay_y + outline_inner_height * y);
-
             let left = *resized_small.get_pixel(x, y);
             let right = *resized_small.get_pixel(x + 1, y);
 
@@ -135,6 +150,9 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             let right_pixel = ImageBuffer::from_pixel(pixel_width, pixel_height, right);
 
             let bit = left.to_luma()[0] > right.to_luma()[0];
+
+            imageops::overlay(&mut frame, if bit { &green_outline } else { &red_outline },
+                              outline_x + pixel_width * x, outline_y + pixel_height * y);
 
             // position the left pixel in the second third of the image's width
             let left_pixel_x = ctxt.width / 3 * 2;
@@ -158,7 +176,8 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
 
             draw_glyph(&mut frame, &comp_glyph, &bit_color);
 
-            let string_x = ctxt.width / 2 * 11 / 10;
+            // place the string just after the horizontal halfway point with some padding
+            let string_x = fmul(ctxt.width / 2, 1.1);
             let string_y = gif_height * 3 / 4;
             ctxt.layout_text(bitstring.as_str(), string_x, string_y).enumerate()
                 .for_each(|(i, g)| {
