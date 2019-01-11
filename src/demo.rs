@@ -25,6 +25,11 @@ pub struct DemoCtxt {
 
 const DEMO_FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
 
+pub const WHITE_A: Rgba<u8> = Rgba { data: [255; 4] };
+pub const BLACK: Rgb<u8> = Rgb{ data: [0, 0, 0 ] };
+pub const RED: Rgb<u8> = Rgb { data: [255, 0, 0] };
+pub const GREEN: Rgb<u8> = Rgb { data: [0, 255, 0] };
+
 #[macro_export]
 macro_rules! explain {
     ($($arg:tt)*) => { |e| format!("{}: {}", format_args!($($arg)*), e) }
@@ -145,6 +150,11 @@ fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
     (0 ..= frame_cnt).map(move |f| f as f32 / frame_cnt as f32)
 }
 
+/// Create an iterator that generates (x, y) coordinate pairs in row-major order
+pub fn x_y_iter(width: u32, height: u32) -> impl Iterator<Item = (u32, u32)> {
+    (0 .. height).flat_map(move |y| (0 .. widht).map(move |x| (x, y)))
+}
+
 pub fn draw_glyph(buf: &mut RgbaImage, glyph: &PositionedGlyph, color: &Rgb<u8>) {
     let Point { x, y } = glyph.position();
     let (pos_x, pos_y) = (x as u32, y as u32);
@@ -205,8 +215,12 @@ impl Outline {
         Outline { inner_width, inner_height, thickness }
     }
 
+    /// NOTE: x and y are the **inside** top-left corner of the outline
     pub fn draw(&self, i: &mut RgbaImage, x: u32, y: u32, color: Rgb<u8>) {
         let Outline { inner_width, inner_height, thickness } = *self;
+
+        let x = x - self.thickness;
+        let y = y - self.thickness;
 
         let outer_width = inner_width + thickness * 2;
         let outer_height = inner_height + thickness * 2;

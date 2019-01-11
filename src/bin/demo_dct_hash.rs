@@ -3,17 +3,15 @@ extern crate img_hash;
 extern crate rayon;
 extern crate rusttype;
 
+extern crate rustdct;
+extern crate transpose;
+
 use img_hash::demo::*;
 use image::*;
 use rusttype::{Scale, Point};
 
-const HASH_WIDTH: u32 = 9;
+const HASH_WIDTH: u32 = 8;
 const HASH_HEIGHT: u32 = 8;
-
-const WHITE_A: Rgba<u8> = Rgba { data: [255; 4] };
-const BLACK: Rgb<u8> = Rgb{ data: [0, 0, 0 ] };
-const RED: Rgb<u8> = Rgb { data: [255, 0, 0] };
-const GREEN: Rgb<u8> = Rgb { data: [0, 255, 0] };
 
 macro_rules! handle(
     ($try:expr) => {
@@ -26,7 +24,7 @@ macro_rules! handle(
 fn main() -> Result<(), String> {
     let ref ctxt = DemoCtxt::init("demo_gradient", "HashAlg::Gradient")?;
 
-    println!("generating Gradient hash demo");
+    println!("generating DCT-mean hash demo");
 
     println!("generating grayscale animation");
     // 4 FPS over 5 seconds
@@ -51,12 +49,12 @@ fn main() -> Result<(), String> {
         });
 
         s.spawn(move |s| {
-            println!("generating gradient hash animation");
-            let gradient_anim = animate_gradient(ctxt, grayscale);
+            println!("generating DCT processing animation");
+            let dct_anim = animate_dct(ctxt, grayscale);
 
             s.spawn(move |s| {
-                println!("saving gradient hash animation");
-                handle!(ctxt.save_gif("gradient_hash", gradient_anim));
+                println!("saving DCT processing animation");
+                handle!(ctxt.save_gif("dct", gradient_anim));
             })
         })
 
@@ -68,6 +66,41 @@ fn main() -> Result<(), String> {
 /// Multiply a `u32` by an `f32` with a truncated result
 fn fmul(x: u32, y: f32) -> u32 {
     (x as f32 * y) as u32
+}
+
+fn animate_dct(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
+    // the final resized image
+    let resized_small = imageops::resize(grayscale, HASH_WIDTH, HASH_HEIGHT, Lanczos3);
+
+    let half_width = ctxt.width / 2;
+    let gif_height = gif_height;
+    let mut background = ImageBuffer::from_pixel(ctxt.width, gif_height, WHITE_A);
+
+    let resize_width = fmul(half_width, 0.9);
+    let resize_height = fmul(gif_height, 0.9);
+
+    let resized = imageops::resize(&resized_small, resize_width, resize_height, Nearest);
+
+    let overlay_x = (half_width - resize_width) / 2;
+    let overlay_y = (gif_height - resize_height) / 2;
+
+    let pixel_width = resize_width / HASH_WIDTH;
+    let pixel_height = resize_height / HASH_HEIGHT;
+
+    imageops::overlay(&mut background, &resized, overlay_x, overlay_y);
+
+    let outline_thickness = fmul(pixel_width, 0.1);
+    let px_outline = Outline::new(pixel_width, pixel_height, outline_thickness);
+
+    let mut output = ImageBuffer::from_pixel(resize_width, resize_height, WHITE_A);
+
+    x_y_iter(HASH_WIDTH, HASH_HEIGHT).map(|(x, y)| {
+        let mut frame = background.clone();
+        let output_x = overlay_x + half_width;
+        let output_y = overlay_y;
+
+        // TODO: simulate DCT by iterating pixels in row/columns and blending result into output px
+    }).collect()
 }
 
 fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
@@ -98,6 +131,10 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
     // configure an outline with 20% thickness
     let outline = Outline::new(pixel_width * 2, pixel_height, fmul(pixel_width, 0.1));
 
+    // subtract the thickness of the outline from its overall offset
+    let outline_x = overlay_x - outline.thickness;
+    let outline_y = overlay_y - outline.thickness;
+
     let mut bitstring = Bitstring::new();
 
     // we touch HASH_HEIGHT * (HASH_WIDTH - 1) pixels
@@ -113,8 +150,7 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             let bit = left.to_luma()[0] > right.to_luma()[0];
             let bit_color = if bit { GREEN } else { RED };
 
-            // Outline::draw calculates based on the inside top-left corner of the outline
-            outline.draw(&mut frame, overlay_x + pixel_width * x, overlay_y + pixel_height * y,
+            outline.draw(&mut frame, outline_x + pixel_width * x, outline_y + pixel_height * y,
                          bit_color);
 
             // position the left pixel in the second third of the image's width
