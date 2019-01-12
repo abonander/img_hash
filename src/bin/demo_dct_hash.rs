@@ -30,31 +30,40 @@ fn main() -> Result<(), String> {
     let ref grayscale = grayscale_anim.last().unwrap().buffer().clone();
 
     rayon::scope(move |s| {
-        s.spawn(move |s| {
+        s.spawn(move |_| {
             println!("saving grayscale animation");
             handle!(ctxt.save_gif("grayscale", grayscale_anim));
+            println!("done saving grayscale animation");
         });
 
         s.spawn(move |s| {
             println!("generating resize animation");
             let resize_anim = ctxt.animate_resize(grayscale, DCT_WIDTH, DCT_HEIGHT, 20, 25);
 
-            s.spawn(move |s| {
+            s.spawn(move |_| {
                 println!("saving resize animation");
                 handle!(ctxt.save_gif("resize", resize_anim));
+                println!("done saving resize animation");
             });
         });
 
-        s.spawn(move |s| {
-            println!("generating DCT processing animation");
-            let (dct_anim, dct) = animate_dct(ctxt, grayscale);
+        println!("generating DCT processing animation");
+        let (dct_anim, dct) = animate_dct(ctxt, grayscale);
 
-            s.spawn(move |s| {
-                println!("saving DCT processing animation");
-                handle!(ctxt.save_gif("dct", dct_anim));
-            })
-        })
+        s.spawn(move |_| {
+            println!("saving DCT processing animation");
+            handle!(ctxt.save_gif("dct", dct_anim));
+            println!("done saving DCT processing animation");
+        });
 
+        println!("generating DCT crop animation");
+        let (crop_anim, cropped) = animate_crop(ctxt, dct);
+
+        s.spawn(move |_| {
+            println!("saving DCT crop animation");
+            handle!(ctxt.save_gif("dct_crop", crop_anim));
+            println!("done saving DCT crop animation");
+        });
     });
 
     Ok(())
@@ -116,12 +125,10 @@ fn animate_dct(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> (Vec<Frame>, RgbaImage
             if x < input_x + resize_width {
                 // the part of the output image that overlaps the input image is inverted
                 // and alpha set to one-half
-                for x in 0 .. (resize_width - (x - input_x)) {
-                    for y in 0 .. resize_height {
-                        let mut px = output.get_pixel_mut(x, y);
-                        px.invert();
-                        px[3] = 127;
-                    }
+                for (x, y) in x_y_iter(resize_width - (x - input_x), resize_height) {
+                    let mut px = output.get_pixel_mut(x, y);
+                    px.invert();
+                    px[3] = 127;
                 }
             }
 
@@ -132,7 +139,83 @@ fn animate_dct(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> (Vec<Frame>, RgbaImage
 
     imageops::overlay(&mut background, &resized_output, output_x, output_y);
 
-    frames.push(Frame::from_parts(background, 0, 0, 5000.into()));
+    frames.push(Frame::from_parts(background, 0, 0, 500.into()));
 
     (frames, dct_img)
+}
+
+fn animate_crop(ctxt: &DemoCtxt, mut full: RgbaImage) -> (Vec<Frame>, RgbaImage) {
+    let cropped = full.sub_image(0, 0, HASH_WIDTH, HASH_HEIGHT).to_image();
+
+    // don't assume a square hash in case we want to play with the values
+    let gif_height = (ctxt.width * HASH_HEIGHT) / HASH_WIDTH;
+    let full_width = fmul(ctxt.width, 0.8);
+    let full_height = fmul(gif_height, 0.8);
+
+    // extract the multiplier
+    let cropped_width = (full_width * HASH_WIDTH) / DCT_WIDTH;
+    let cropped_height = (full_height * HASH_HEIGHT) / DCT_HEIGHT;
+
+    let background = rgba_fill_white(ctxt.width, gif_height);
+
+    let resize_cropped = imageops::resize(&cropped, cropped_width, cropped_height, Nearest);
+    let mut resize_full = imageops::resize(&full, full_width, full_height, Nearest);
+
+    let overlay_x = (ctxt.width - full_width) / 2;
+    let overlay_y = (gif_height - full_height) / 2;
+
+    let mut frame = background.clone();
+    imageops::overlay(&mut frame, &resize_full, overlay_x, overlay_y);
+
+    // first frame, just original image for 2 seconds
+    let first_frame = Frame::from_parts(frame.clone(), 0, 0, 200.into());
+
+    let outline = Outline::new(cropped_width, cropped_height, fmul(cropped_width, 0.01));
+
+    // second frame, draw crop outline
+    outline.draw(&mut frame, overlay_x, overlay_y, RED);
+    let second_frame = Frame::from_parts(frame, 0, 0, 200.into());
+
+    for (x, y, mut px) in resize_full.enumerate_pixels_mut() {
+        // the part of `full` that lies under `cropped` gets set to all zeros
+        if x < cropped_width && y < cropped_height {
+            px.data = [0; 4];
+        } else {
+            // the rest gets set to 70% alpha
+            px[3] = fmul(255, 0.7) as u8;
+        }
+    }
+
+    let remaining = resize_full;
+
+    let mut background = ImageBuffer::from_pixel(ctxt.width, gif_height, WHITE_A);
+    imageops::overlay(&mut background, &resize_cropped, overlay_x, overlay_y);
+    outline.draw(&mut background, overlay_x, overlay_y, RED);
+
+    let frames: Vec<_> = Some(first_frame).into_iter().chain(Some(second_frame)).chain(
+        lerp_iter([overlay_x, overlay_y], [full_width, full_height], 2000, 10)
+            .map(|([x, y], delay)| {
+                let mut frame = background.clone();
+                imageops::overlay(&mut frame, &remaining, x, y);
+
+                // if `remaining` overlaps the outline, redraw the outline
+                if x - overlay_x < outline.thickness || y - overlay_y < outline.thickness {
+                    outline.draw(&mut frame, overlay_x, overlay_y, RED);
+                }
+
+                Frame::from_parts(frame, 0, 0, delay.into())
+            })
+    ).chain(
+        // now resize the cropped part to full
+        lerp_iter([cropped_width, cropped_height], [full_width, full_height], 2000, 10).map(
+            |([w, h], delay)| {
+                let mut frame = rgba_fill_white(ctxt.width, gif_height);
+                let resized = imageops::resize(&cropped, w, h, Nearest);
+                imageops::overlay(&mut frame, &resized, overlay_x, overlay_y);
+                Frame::from_parts(frame, 0, 0, delay.into())
+            }
+        )
+    ).collect();
+
+    (frames, cropped)
 }

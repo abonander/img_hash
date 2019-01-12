@@ -148,6 +148,9 @@ impl DemoCtxt {
     }
 }
 
+pub fn rgba_fill_white(width: u32, height: u32) -> RgbaImage {
+    ImageBuffer::from_pixel(width, height, WHITE_A)
+}
 
 /// Multiply a `u32` by an `f32` with a truncated result
 pub fn fmul(x: u32, y: f32) -> u32 {
@@ -168,6 +171,8 @@ pub fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
 /// framerate, yielding for each frame the lerped value and the frame delay
 pub fn lerp_iter<S: Spatial<Scalar = f32>>(start: S, end: S, ms: u16, fps: u16)
     -> impl Iterator<Item = (S, u16)> {
+    assert!(fps <= 100);
+    assert_ne!(fps, 0);
     let frame_delay = 100 / fps;
     let frame_cnt = ms / (1000 / fps);
 
