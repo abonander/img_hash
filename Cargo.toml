@@ -23,7 +23,7 @@ demo = ["interpolation", "rayon", "rusttype"]
 
 [dependencies]
 base64 = "0.10"
-image = "0.20"
+image = "0.21"
 rustdct = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.1"
@@ -42,4 +42,8 @@ harness = false
 
 [[bin]]
 name = "demo_gradient"
+required-features = ["demo"]
+
+[[bin]]
+name = "demo_dct_hash"
 required-features = ["demo"]

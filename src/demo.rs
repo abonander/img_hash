@@ -6,9 +6,11 @@
 extern crate interpolation;
 extern crate rusttype;
 
-use image::{self, *};
-use self::interpolation::*;
-use self::rusttype::*;
+pub use image::{self, *};
+pub use self::interpolation::*;
+pub use self::rusttype::*;
+
+pub use dct::DctCtxt;
 
 use std::env;
 use std::fs;
@@ -86,7 +88,7 @@ impl DemoCtxt {
             .map_err(explain!("failed to create {}", path.display()))?;
 
         let mut encoder = gif::Encoder::new(BufWriter::new(file));
-        encoder.encode_frames(Frames::new(frames))
+        encoder.encode_frames(frames)
             .map_err(explain!("failed to write gif frames to {}", path.display()))
     }
 
@@ -146,13 +148,38 @@ impl DemoCtxt {
     }
 }
 
-fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
+
+/// Multiply a `u32` by an `f32` with a truncated result
+pub fn fmul(x: u32, y: f32) -> u32 {
+    (x as f32 * y) as u32
+}
+
+/// Cast a luminance value to an `Rgba` with full alpha
+pub fn luma_rgba(luma: u8) -> Rgba<u8> {
+    Luma{ data: [luma] }.to_rgba()
+}
+
+/// Generate an iterator that yields `frame_cnt` times in `[0, 1]`
+pub fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
     (0 ..= frame_cnt).map(move |f| f as f32 / frame_cnt as f32)
+}
+
+/// Lerp between two interpolatable values over the given number of milliseconds at the given
+/// framerate, yielding for each frame the lerped value and the frame delay
+pub fn lerp_iter<S: Spatial<Scalar = f32>>(start: S, end: S, ms: u16, fps: u16)
+    -> impl Iterator<Item = (S, u16)> {
+    let frame_delay = 100 / fps;
+    let frame_cnt = ms / (1000 / fps);
+
+    (0 ..= frame_cnt).map(move |f| {
+        let weight = f as f32 / frame_cnt as f32;
+        (lerp(&start, &end, &weight), frame_delay)
+    })
 }
 
 /// Create an iterator that generates (x, y) coordinate pairs in row-major order
 pub fn x_y_iter(width: u32, height: u32) -> impl Iterator<Item = (u32, u32)> {
-    (0 .. height).flat_map(move |y| (0 .. widht).map(move |x| (x, y)))
+    (0 .. height).flat_map(move |y| (0 .. width).map(move |x| (x, y)))
 }
 
 pub fn draw_glyph(buf: &mut RgbaImage, glyph: &PositionedGlyph, color: &Rgb<u8>) {
@@ -217,6 +244,7 @@ impl Outline {
 
     /// NOTE: x and y are the **inside** top-left corner of the outline
     pub fn draw(&self, i: &mut RgbaImage, x: u32, y: u32, color: Rgb<u8>) {
+
         let Outline { inner_width, inner_height, thickness } = *self;
 
         let x = x - self.thickness;
@@ -235,6 +263,11 @@ impl Outline {
         let lower_y = y + thickness;
         let upper_y = y + outer_height - thickness;
         let max_y = y + outer_height;
+
+        assert!(max_x < i.dimensions().0 && max_y < i.dimensions().1,
+                "outline will fall out of bounds: {:?}, bounds: {:?}",
+                (max_x, max_y), i.dimensions());
+
 
         (y .. lower_y).chain(upper_y .. max_y)
             .flat_map(|y| (x .. max_x).map(move |x| (x, y))) // top and bottom bars

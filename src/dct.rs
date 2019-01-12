@@ -6,6 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// https://github.com/rust-lang/rust/issues/57533
+#![allow(missing_docs)]
+
 use rustdct::{DCTplanner, Type2And3};
 use transpose::transpose;
 

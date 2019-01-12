@@ -495,9 +495,8 @@ impl HashCtxt {
 
             let mut vals_with_scratch = Vec::with_capacity(input_len);
 
-            // put the image values in [0, 1] in [..width * height] and provide scratch space
-            // this actually optimizes better than a lookup table, see `benches/byte_to_float.rs`
-            vals_with_scratch.extend(img_vals.into_iter().map(|x| x as f32 / 255 as f32));
+            // put the image values in [..width * height] and provide scratch space
+            vals_with_scratch.extend(img_vals.into_iter().map(|x| x as f32));
             // TODO: compare with `.set_len()`
             vals_with_scratch.resize(input_len, 0.);
 
@@ -509,6 +508,8 @@ impl HashCtxt {
         }
     }
 }
+
+
 
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.

@@ -4,8 +4,6 @@ extern crate rayon;
 extern crate rusttype;
 
 use img_hash::demo::*;
-use image::*;
-use rusttype::{Scale, Point};
 
 const HASH_WIDTH: u32 = 9;
 const HASH_HEIGHT: u32 = 8;
@@ -63,11 +61,6 @@ fn main() -> Result<(), String> {
     });
 
     Ok(())
-}
-
-/// Multiply a `u32` by an `f32` with a truncated result
-fn fmul(x: u32, y: f32) -> u32 {
-    (x as f32 * y) as u32
 }
 
 fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
