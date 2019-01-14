@@ -103,7 +103,10 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             let left_pixel = ImageBuffer::from_pixel(pixel_width, pixel_height, left);
             let right_pixel = ImageBuffer::from_pixel(pixel_width, pixel_height, right);
 
-            let bit = left.to_luma()[0] > right.to_luma()[0];
+            let left_val = left.to_luma()[0];
+            let right_val = right.to_luma()[0];
+            let bit = left_val > right_val;
+            let eq = left_val == right_val;
             let bit_color = if bit { GREEN } else { RED };
 
             // Outline::draw calculates based on the inside top-left corner of the outline
@@ -116,7 +119,7 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
             let pixel_y = gif_height / 4;
 
             // between the two pixels draw either `<` or `>`
-            let comp = if bit { '>' } else { '⩽' };
+            let comp = if bit { '>' } else if eq { '=' } else { '<' };
             bitstring.push_bit(bit);
 
             let comp_glyph = center_in_area(

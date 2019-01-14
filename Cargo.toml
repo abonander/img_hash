@@ -48,7 +48,3 @@ required-features = ["demo"]
 [[bin]]
 name = "demo_dct_hash"
 required-features = ["demo"]
-
-[[bin]]
-name = "test_interpolation"
-required-features = ["demo"]

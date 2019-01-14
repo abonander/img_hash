@@ -25,7 +25,7 @@ pub struct DemoCtxt {
     pub font: Font<'static>,
 }
 
-const DEMO_FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+const DEMO_FONT: &[u8] = include_bytes!("../assets/AverageMono.ttf");
 
 pub const WHITE_A: Rgba<u8> = Rgba { data: [255; 4] };
 pub const BLACK: Rgb<u8> = Rgb{ data: [0, 0, 0 ] };
@@ -153,6 +153,13 @@ pub fn rgba_fill_white(width: u32, height: u32) -> RgbaImage {
     ImageBuffer::from_pixel(width, height, WHITE_A)
 }
 
+/// Fill a rectangle in `img` with the given color
+pub fn fill_color(img: &mut RgbaImage, color: Rgba<u8>, x: u32, y: u32, width: u32, height: u32) {
+    for (off_x, off_y) in x_y_iter(width, height) {
+        *img.get_pixel_mut(x + off_x, y + off_y) = color;
+    }
+}
+
 /// Multiply a `u32` by an `f32` with a truncated result
 pub fn fmul(x: u32, y: f32) -> u32 {
     (x as f32 * y) as u32
@@ -266,8 +273,8 @@ where B: GenericImage, F: GenericImageView<Pixel = B::Pixel> {
 }
 
 // at bitstring lengths above this value, ellipsize the middle
-pub const MAX_BITSTR_LEN: usize = 16;
-const ELLIPSIS_START: usize = 6;
+pub const MAX_BITSTR_LEN: usize = 13;
+const ELLIPSIS_START: usize = 4;
 const ELLIPSIS_PAT: &str = "[...]";
 
 pub struct Bitstring(String);
