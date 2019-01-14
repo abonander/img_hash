@@ -3,6 +3,8 @@ extern crate rayon;
 
 use img_hash::demo::*;
 
+use std::collections::VecDeque;
+
 const HASH_WIDTH: u32 = 8;
 const HASH_HEIGHT: u32 = 8;
 
@@ -63,6 +65,15 @@ fn main() -> Result<(), String> {
             println!("saving DCT crop animation");
             handle!(ctxt.save_gif("dct_crop", crop_anim));
             println!("done saving DCT crop animation");
+        });
+
+        println!("generating mean animation");
+        let (mean_anim, mean) = animate_mean(ctxt, cropped);
+
+        s.spawn(move |_| {
+            println!("saving DCT mean animation");
+            handle!(ctxt.save_gif("dct_mean", mean_anim));
+            println!("done saving DCT mean animation");
         });
     });
 
@@ -161,8 +172,8 @@ fn animate_crop(ctxt: &DemoCtxt, mut full: RgbaImage) -> (Vec<Frame>, RgbaImage)
     let resize_cropped = imageops::resize(&cropped, cropped_width, cropped_height, Nearest);
     let mut resize_full = imageops::resize(&full, full_width, full_height, Nearest);
 
-    let overlay_x = (ctxt.width - full_width) / 2;
-    let overlay_y = (gif_height - full_height) / 2;
+    let (overlay_x, overlay_y) = center_at_point(ctxt.width / 2, gif_height / 2,
+                                                 full_width, full_height);
 
     let mut frame = background.clone();
     imageops::overlay(&mut frame, &resize_full, overlay_x, overlay_y);
@@ -218,4 +229,129 @@ fn animate_crop(ctxt: &DemoCtxt, mut full: RgbaImage) -> (Vec<Frame>, RgbaImage)
     ).collect();
 
     (frames, cropped)
+}
+
+/// framerate of the mean animation
+const MEAN_FPS: u16 = 20;
+const MEAN_FRAME_DELAY: u16 = 100 / MEAN_FPS;
+
+fn animate_mean(ctxt: &DemoCtxt, data: RgbaImage) -> (Vec<Frame>, u8) {
+    let resize_width = fmul(ctxt.width / 2, 0.9);
+    let resize_height = resize_width * HASH_HEIGHT / HASH_WIDTH;
+
+    let gif_height = ctxt.width / 2;
+
+    let pixel_width = resize_width / HASH_WIDTH;
+    let pixel_height = resize_height / HASH_HEIGHT;
+
+    // required for `.sub_image()`
+    let mut resized = imageops::resize(&data, resize_width, resize_height, Nearest);
+
+    let outline_thickness = fmul(pixel_width, 0.1);
+    let px_outline = Outline::new(pixel_width, pixel_height, outline_thickness);
+
+    let mut mean = data.get_pixel(0, 0).to_luma()[0];
+
+    let (resized_x, resized_y) = center_at_point(ctxt.width / 4, gif_height / 2,
+                                                 resize_width, resize_height);
+
+    let mut img_base = ImageBuffer::from_pixel(ctxt.width, gif_height, WHITE_A);
+    imageops::overlay(&mut img_base, &resized, resized_x, resized_y);
+
+    // intended effect: have each pixel fly on a curving path toward the mean pixel
+    // support multiple pixels in-flight at once
+    let mut inflight = VecDeque::new();
+    let mut frames = vec![];
+
+    // make the mean pixel twice as large to emphasize it
+    let mean_width = pixel_width * 2;
+    let mean_height = pixel_height * 2;
+
+    // center the mean pixel in the right half of the frame
+    let (target_x, target_y) = (ctxt.width * 3 / 4, gif_height / 2);
+
+    let (mean_x, mean_y) = center_at_point(target_x, target_y, mean_width, mean_height);
+
+    let (end_x, end_y) = center_at_point(target_x, target_y, pixel_width, pixel_height);
+
+    // macros don't capture for their lifetime but they can access locals
+    macro_rules! animate (
+        () => {
+            assert_ne!(inflight.len(), 0);
+
+            let mut frame = img_base.clone();
+            macro_rules! draw_mean(
+                () => {
+                    for (x, y) in x_y_iter(mean_width, mean_height) {
+                        *frame.get_pixel_mut(mean_x + x, mean_y + y) = luma_rgba(mean);
+                    }
+                }
+            );
+            draw_mean!();
+
+            // since we might remove indices while iterating, we'll need to visit them twice
+            let mut i = 0;
+            while i < inflight.len() {
+                let (px_x, px_y) = inflight[i].1;
+
+                let px = data.get_pixel(px_x, px_y).to_rgb();
+                let mut outline_color = px.clone();
+                outline_color.invert();
+
+                if let Some(([next_x, next_y], _)) = inflight[i].0.next() {
+                    let px_img = resized.sub_image(pixel_width * px_x, pixel_height * px_y,
+                                               pixel_width, pixel_height);
+
+
+
+                    overlay_generic(&mut frame, &px_img, next_x, next_y);
+                    px_outline.draw(&mut frame, next_x, next_y, outline_color);
+                    i += 1;
+                } else {
+                    mean = ((mean as u16 + px.to_luma()[0] as u16) / 2) as u8;
+                    draw_mean!();
+                    inflight.remove(i);
+                    // `i` does not change as we have to revisit the index
+                }
+            }
+
+            frames.push(Frame::from_parts(frame, 0, 0, MEAN_FRAME_DELAY.into()));
+        }
+    );
+
+    for (x, y) in x_y_iter(HASH_WIDTH, HASH_HEIGHT) {
+        let start = [resized_x + pixel_width * x, resized_y + pixel_width * y];
+
+        let ctl1_x = resized_x + resize_width;
+        // 10% over the middle of the image
+        let ctl2_x = fmul(ctxt.width / 2, 1.1);
+
+        let ctl_upper_y = gif_height;
+        let ctl_lower_y = 0;
+
+        let (ctl1, ctl2) = if y < gif_height / 2 {
+            // go down then come back up
+            ([ctl1_x, ctl_lower_y], [ctl2_x, ctl_upper_y])
+        } else {
+            // go up then come back down
+            ([ctl1_x, ctl_upper_y], [ctl2_x, ctl_lower_y])
+        };
+
+        inflight.push_back((
+            bez3_iter([start, ctl1, ctl2, [end_x, end_y]], 400, MEAN_FPS),
+            (x, y)
+        ));
+
+        // run the animation for a couple frames before starting the next pixel
+        for _ in 0 .. 2 {
+            animate!();
+        }
+    }
+
+    // finish the animations
+    while !inflight.is_empty() {
+        animate!();
+    }
+
+    (frames, mean)
 }

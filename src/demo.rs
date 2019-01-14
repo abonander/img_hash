@@ -33,6 +33,7 @@ pub const RED: Rgb<u8> = Rgb { data: [255, 0, 0] };
 pub const GREEN: Rgb<u8> = Rgb { data: [0, 255, 0] };
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! explain {
     ($($arg:tt)*) => { |e| format!("{}: {}", format_args!($($arg)*), e) }
 }
@@ -167,18 +168,39 @@ pub fn frame_iter(frame_cnt: u32) -> impl Iterator<Item = f32> {
     (0 ..= frame_cnt).map(move |f| f as f32 / frame_cnt as f32)
 }
 
-/// Lerp between two interpolatable values over the given number of milliseconds at the given
-/// framerate, yielding for each frame the lerped value and the frame delay
-pub fn lerp_iter<S: Spatial<Scalar = f32>>(start: S, end: S, ms: u16, fps: u16)
-    -> impl Iterator<Item = (S, u16)> {
+/// Given the number of millis and framerate, return the frame delay and count, respectively.
+pub fn frame_delay_cnt(ms: u16, fps: u16) -> (u16, u16) {
     assert!(fps <= 100);
     assert_ne!(fps, 0);
     let frame_delay = 100 / fps;
     let frame_cnt = ms / (1000 / fps);
+    (frame_delay, frame_cnt)
+}
+
+/// Lerp between two interpolatable values over the given number of milliseconds at the given
+/// framerate, yielding for each frame the lerped value and the frame delay
+pub fn lerp_iter<S: Lerp<Scalar = f32>>(start: S, end: S, ms: u16, fps: u16)
+    -> impl Iterator<Item = (S, u16)> {
+    let (frame_delay, frame_cnt) = frame_delay_cnt(ms, fps);
 
     (0 ..= frame_cnt).map(move |f| {
         let weight = f as f32 / frame_cnt as f32;
         (lerp(&start, &end, &weight), frame_delay)
+    })
+}
+
+/// Iterate over a cubic bezier with the given parameters, over the given number of milliseconds
+/// at the given framerate, yielding for each frame the interpolated value and the frame delay.
+pub fn bez3_iter<S: Lerp<Scalar = f32>>(params: [S; 4], ms: u16, fps: u16)
+    -> impl Iterator<Item = (S, u16)> {
+    let (frame_delay, frame_cnt) = frame_delay_cnt(ms, fps);
+
+    (0 ..= frame_cnt).map(move |f| {
+        let [ref start, ref ctl1, ref ctl2, ref end] = params;
+
+        let weight = f as f32 / frame_cnt as f32;
+        let pt = cub_bez(start, ctl1, ctl2, end, &weight);
+        (pt, frame_delay)
     })
 }
 
@@ -199,6 +221,15 @@ pub fn draw_glyph(buf: &mut RgbaImage, glyph: &PositionedGlyph, color: &Rgb<u8>)
     })
 }
 
+/// Given a point and the width and height of an object, give coordinates that will center
+/// it on that point
+pub fn center_at_point(x: u32, y: u32, width: u32, height: u32) -> (u32, u32) {
+    assert!(x > (width / 2));
+    assert!(y > (height / 2));
+
+    (x - width / 2, y - width / 2)
+}
+
 pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> PositionedGlyph {
     let Point { x, y } = glyph.position();
     let (x, y) = (x as u32, y as u32);
@@ -213,6 +244,25 @@ pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> Positi
     let new_y = y + (width - gheight) / 2;
 
     glyph.into_unpositioned().positioned(Point { x: new_x as f32, y: new_y as f32 })
+}
+
+pub fn overlay_generic<B, F>(bg: &mut B, fg: &F, x: u32, y: u32)
+where B: GenericImage, F: GenericImageView<Pixel = B::Pixel> {
+    let bg_dims = bg.dimensions();
+    let fg_dims = fg.dimensions();
+
+    // Crop our foreground image if we're going out of bounds
+    let (range_width, range_height) = imageops::overlay_bounds(bg_dims, fg_dims, x, y);
+
+    for fg_y in 0..range_height {
+        for fg_x in 0..range_width {
+            let p = fg.get_pixel(fg_x, fg_y);
+            let mut bg_pixel = bg.get_pixel(x + fg_x, y + fg_y);
+            bg_pixel.blend(&p);
+
+            bg.put_pixel(x + fg_x, y + fg_y, bg_pixel);
+        }
+    }
 }
 
 // at bitstring lengths above this value, ellipsize the middle
