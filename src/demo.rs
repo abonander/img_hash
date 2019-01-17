@@ -22,7 +22,7 @@ use std::process;
 
 #[derive(Clone)]
 pub struct DemoCtxt {
-    pub image: RgbaImage,
+    pub images: Vec<RgbaImage>,
     pub output_dir: PathBuf,
     pub width: u32,
     pub font: Font<'static>,
@@ -42,32 +42,40 @@ macro_rules! explain {
 }
 
 impl DemoCtxt {
-    pub fn init(name: &str, alg: &str) -> Result<DemoCtxt, String> {
+    pub fn init(name: &str, purpose: &str, img_cnt: usize) -> Result<DemoCtxt, String> {
         let font = Font::from_bytes(DEMO_FONT).expect("failed to read font");
 
         let args = env::args().collect::<Vec<_>>();
 
-        if args.len() != 4 {
+        if args.len() != 3 + img_cnt {
+            let file_args = if img_cnt == 1 {
+                "[FILE]"
+            } else {
+                (1 ..= img_cnt).map(|i| format!("[FILE {}]", i)).collect::<Vec<_>>().join(" ")
+            };
+
             println!("args: {:?}", args);
             println!("\
-                usage: {name} [FILE] [OUTPUT-DIR] [WIDTH]\r\n\
-                demos `{alg}` for FILE, exporting gifs of each step to OUTPUT-DIR\r\n\
+                usage: {name} {file_args} [OUTPUT-DIR] [WIDTH]\r\n\
+                {purpose}, exporting gifs of each step to OUTPUT-DIR\r\n\
                 each gif will be WIDTH wide; aspect ratio is fixed\r\n\
-             ", name = name, alg = alg);
+             ", name = name, file_args = file_args, purpose = purpose);
             process::exit(0);
         }
 
-        let file = &args[1];
-        let output = &args[2];
-        let width = args[3].parse().map_err(explain!("could not parse WIDTH: {}", args[3]))?;
+        let output_dir = args[img_cnt + 1].into();
+        let width = args[img_cnt + 2].parse()
+            .map_err(explain!("could not parse WIDTH: {}", args[img_cnt + 2]))?;
 
-        let image = image::open(file).map_err(explain!("failed to open {}", file))?;
+        let images = args[1 .. img_cnt + 1].map(|file|
+            image::open(file).map(|i| i.to_rgba()).map_err(explain!("failed to open {}", file))
+        ).collect::<Result<Vec<_>, _>>()?;
 
         fs::create_dir_all(output).map_err(explain!("failed to create output dir {}", output))?;
 
         Ok(Self {
-            image: image.to_rgba(),
-            output_dir: output.into(),
+            images,
+            output_dir,
             width,
             font,
         })
@@ -152,6 +160,29 @@ impl DemoCtxt {
     }
 }
 
+/// Given dimensions and the size of the region, find new dimensions that fill the region
+/// while retaining aspect ratio
+pub fn dimen_fill_area(dimen: (u32, u32), region: (u32, u32)) -> (u32, u32) {
+    let (width, height) = dimen;
+    let (rwidth, rheight) = region;
+
+    let dratio = (width as f32 / height as f32);
+    let rratio = (rwidth as f32 / height as f32);
+
+    // the dimensions are wider than the region, fit the width and scale the size accordingly
+    if dratio > rratio {
+        let wratio = (width as f32 / rwidth as f32);
+        (rwidth, fmul(height, wratio))
+    } else if dratio == rratio {
+        // aspect ratios are exactly the same, just resize to the region
+        (rwidth, rheight)
+    } else {
+        // dimensions are narrower than the region, fit the height and scale accordingly
+        let hratio = (height as f32 / rheight as f32);
+        (fmul(width, hratio), rheight)
+    }
+}
+
 pub fn rgba_fill_white(width: u32, height: u32) -> RgbaImage {
     ImageBuffer::from_pixel(width, height, WHITE_A)
 }
@@ -220,13 +251,19 @@ pub fn x_y_iter(width: u32, height: u32) -> impl Iterator<Item = (u32, u32)> {
 }
 
 pub fn draw_glyph(buf: &mut RgbaImage, glyph: &PositionedGlyph, color: &Rgb<u8>) {
+    draw_glyph_sampled(buf, glyph, |_, _| color.to_rgba())
+}
+
+pub fn draw_glyph_sampled(buf: &mut RgbaImage, glyph: &PositionedGlyph,
+                          sample: impl FnMut(u32, u32) -> Rgba<u8>) {
+
     let Point { x, y } = glyph.position();
     let (pos_x, pos_y) = (x as u32, y as u32);
 
     // this doesn't provide offsets from the glyph position
     glyph.draw(|x, y, a| {
-        let mut rgba = color.to_rgba();
-        rgba[3] = (a * 255.) as u8;
+        let mut rgba = sample(x, y);
+        rgba[3] = (a * rgba[3] as f32) as u8;
         buf.get_pixel_mut(pos_x + x, pos_y + y).blend(&rgba);
     })
 }
