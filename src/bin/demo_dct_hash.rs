@@ -12,6 +12,8 @@ const HASH_HEIGHT: u32 = 8;
 const DCT_WIDTH: u32 = HASH_WIDTH * 2;
 const DCT_HEIGHT: u32 = HASH_HEIGHT * 2;
 
+const COMIC_SANS: &[u8] = include_bytes!("../../assets/ComicNeue-Bold.ttf");
+
 macro_rules! handle(
     ($try:expr) => {
         if let Err(e) = $try {
@@ -91,6 +93,8 @@ fn main() -> Result<(), String> {
 
 /// A simple animation showing the DCT values sliding out of the original input
 fn animate_dct(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> (Vec<Frame>, RgbaImage) {
+    let comic_font = Font::from_bytes(COMIC_SANS).expect("failed to read comic font");
+
     let dct_ctxt = DctCtxt::new(DCT_WIDTH, DCT_HEIGHT);
 
     // the final resized image
@@ -153,6 +157,55 @@ fn animate_dct(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> (Vec<Frame>, RgbaImage
             }
 
             imageops::overlay(&mut frame, &output, x, output_y);
+
+            frame = imageops::blur(&frame, 15.0);
+
+            let blank_width = fmul(ctxt.width, 0.75);
+            let blank_height = gif_height / 2;
+            let (blank_x, blank_y) = center_at_point(ctxt.width / 2, gif_height / 2,
+                                                     blank_width, blank_height);
+
+            fn rainbow(x: u32) -> Rgb<u8> {
+                fn rgb(r: u8, g: u8, b: u8) -> Rgb<u8> {
+                    Rgb { data: [r, g, b] }
+                }
+
+                let v = (x % 256) as u8;
+                let phase = (x / 256) % 6;
+
+                match phase {
+                    0 => rgb(255, v, 0),
+                    1 => rgb(255 - v, 255, 0),
+                    2 => rgb(0, 255, v),
+                    3 => rgb(0, 255 - v, 255),
+                    4 => rgb(v, 0, 255),
+                    5 => rgb(255, 0, 255 - v),
+                    _ => unreachable!(),
+                }
+            }
+
+            let draw_glyph_rainbow = |buf: &mut RgbaImage, glyph: &PositionedGlyph| {
+                let Point { x: pos_x, y: pos_y } = glyph.position();
+                let (pos_x, pos_y) = (pos_x as u32, pos_y as u32);
+
+                // this doesn't provide offsets from the glyph position
+                glyph.draw(|off_x, off_y, a| {
+                    // color-shift the rainbow based on the animation
+                    // multiplying the value gives a more rapidly rotating gradient
+                    let mut rgba = rainbow((off_x + pos_x + (x - input_x)) * 6).to_rgba();
+                    rgba[3] = (a * 255.) as u8;
+                    buf.get_pixel_mut(pos_x + off_x, pos_y + off_y).blend(&rgba);
+                })
+            };
+
+            fill_color(&mut frame, WHITE_A, blank_x, blank_y, blank_width, blank_height);
+
+            center_text_in_area(
+                comic_font.layout("[FUCKERY]", Scale::uniform(blank_width as f32 / 5.4),
+                                  Point { x: blank_x as f32, y: blank_y as f32 }),
+                blank_width, blank_height
+            ).for_each(|g| draw_glyph_rainbow(&mut frame, &g));
+
             Frame::from_parts(frame, 0, 0, frame_delay.into())
         })
     ).collect::<Vec<_>>();
