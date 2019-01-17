@@ -256,12 +256,20 @@ pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> Positi
     glyph.into_unpositioned().positioned(Point { x: new_x as f32, y: new_y as f32 })
 }
 
-pub fn center_text_in_area<'a, 'b>(layout: LayoutIter<'a, 'b>, width: u32, height: u32)
+pub fn center_text_in_area<'a, 'b>(layout_: LayoutIter<'a, 'b>, width: u32, height: u32)
     -> iter::Map<LayoutIter<'a, 'b>, impl FnMut(PositionedGlyph<'a>) -> PositionedGlyph<'a>> {
-    let [text_width, text_height] = layout.clone().flat_map(|g| g.pixel_bounding_box())
-        .fold([0, 0], |[width, height], bnd_box|
-            [width + bnd_box.width() as u32, cmp::max(height, bnd_box.height() as u32)]
-        );
+    assert!(width <= i32::max_value() as u32);
+    assert!(height <= i32::max_value() as u32);
+    let (width, height) = (width as i32, height as i32);
+
+    let mut layout = layout_.clone().flat_map(|g| g.pixel_bounding_box());
+
+    // get the text dimensions by subtracting the low point on the far left
+    // from the high point on the far right
+    let min = layout.next().map_or(Point { x: 0, y: 0 }, |bb| bb.min);
+    let max = layout.last().map_or(Point { x: 0, y: 0 }, |bb| bb.max);
+
+    let Vector { x: text_width, y: text_height } = max - min;
 
     assert!(text_width <= width, "text too wide: {} <= {}", text_width, width);
     assert!(text_height <= height, "text too tall: {} <= {}", text_height, height);
@@ -269,7 +277,7 @@ pub fn center_text_in_area<'a, 'b>(layout: LayoutIter<'a, 'b>, width: u32, heigh
     let x = (width - text_width) as f32 / 2.0;
     let y = (height - text_height) as f32 / 2.0;
 
-    layout.map(move |g| {
+    layout_.map(move |g| {
         let pos = g.position() + Vector { x, y };
         g.into_unpositioned().positioned(pos)
     })
