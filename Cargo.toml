@@ -29,8 +29,7 @@ serde = { version = "1.0", features = ["derive"] }
 transpose = "0.1"
 
 # used in src/bin/demo_*.rs
-# FIXME when closed and published: https://github.com/PistonDevelopers/interpolation/pull/45
-interpolation = { git = "https://github.com/abonander/interpolation", optional = true }
+interpolation = { version = "0.2", optional = true }
 rayon = { version = "1.0", optional = true }
 rusttype  = { version = "0.7", optional = true }
 
