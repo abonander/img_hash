@@ -12,12 +12,15 @@ pub use self::rusttype::*;
 
 pub use dct::DctCtxt;
 
+use std::cmp;
 use std::env;
 use std::fs;
 use std::io::BufWriter;
+use std::iter;
 use std::path::PathBuf;
 use std::process;
 
+#[derive(Clone)]
 pub struct DemoCtxt {
     pub image: RgbaImage,
     pub output_dir: PathBuf,
@@ -234,7 +237,7 @@ pub fn center_at_point(x: u32, y: u32, width: u32, height: u32) -> (u32, u32) {
     assert!(x > (width / 2));
     assert!(y > (height / 2));
 
-    (x - width / 2, y - width / 2)
+    (x - width / 2, y - height / 2)
 }
 
 pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> PositionedGlyph {
@@ -251,6 +254,25 @@ pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> Positi
     let new_y = y + (width - gheight) / 2;
 
     glyph.into_unpositioned().positioned(Point { x: new_x as f32, y: new_y as f32 })
+}
+
+pub fn center_text_in_area<'a, 'b>(layout: LayoutIter<'a, 'b>, width: u32, height: u32)
+    -> iter::Map<LayoutIter<'a, 'b>, impl FnMut(PositionedGlyph<'a>) -> PositionedGlyph<'a>> {
+    let [text_width, text_height] = layout.clone().flat_map(|g| g.pixel_bounding_box())
+        .fold([0, 0], |[width, height], bnd_box|
+            [width + bnd_box.width() as u32, cmp::max(height, bnd_box.height() as u32)]
+        );
+
+    assert!(text_width <= width, "text too wide: {} <= {}", text_width, width);
+    assert!(text_height <= height, "text too tall: {} <= {}", text_height, height);
+
+    let x = (width - text_width) as f32 / 2.0;
+    let y = (height - text_height) as f32 / 2.0;
+
+    layout.map(move |g| {
+        let pos = g.position() + Vector { x, y };
+        g.into_unpositioned().positioned(pos)
+    })
 }
 
 pub fn overlay_generic<B, F>(bg: &mut B, fg: &F, x: u32, y: u32)
