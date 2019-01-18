@@ -31,7 +31,8 @@ pub struct DemoCtxt {
 const DEMO_FONT: &[u8] = include_bytes!("../assets/AverageMono.ttf");
 
 pub const WHITE_A: Rgba<u8> = Rgba { data: [255; 4] };
-pub const BLACK: Rgb<u8> = Rgb{ data: [0, 0, 0 ] };
+pub const BLACK_A: Rgba<u8> = Rgba { data: [0, 0, 0, 255] };
+pub const BLACK: Rgb<u8> = Rgb{ data: [0; 3 ] };
 pub const RED: Rgb<u8> = Rgb { data: [255, 0, 0] };
 pub const GREEN: Rgb<u8> = Rgb { data: [0, 255, 0] };
 
@@ -161,6 +162,10 @@ impl DemoCtxt {
     }
 }
 
+pub fn point_f32(x: u32, y: u32) -> Point<f32> {
+    Point { x: x as f32, y: y as f32 }
+}
+
 /// Given dimensions and the size of the region, find new dimensions that fill the region
 /// while retaining aspect ratio
 pub fn dimen_fill_area(dimen: (u32, u32), region: (u32, u32)) -> (u32, u32) {
@@ -168,19 +173,17 @@ pub fn dimen_fill_area(dimen: (u32, u32), region: (u32, u32)) -> (u32, u32) {
     let (rwidth, rheight) = region;
 
     let dratio = (width as f32 / height as f32);
-    let rratio = (rwidth as f32 / height as f32);
+    let rratio = (rwidth as f32 / rheight as f32);
 
-    // the dimensions are wider than the region, fit the width and scale the size accordingly
     if dratio > rratio {
-        let wratio = (width as f32 / rwidth as f32);
-        (rwidth, fmul(height, wratio))
+        // the dimensions are wider than the region, fit the width and scale the size accordingly
+        (rwidth, fmul(rwidth, 1. / dratio))
     } else if dratio == rratio {
         // aspect ratios are exactly the same, just resize to the region
         (rwidth, rheight)
     } else {
         // dimensions are narrower than the region, fit the height and scale accordingly
-        let hratio = (height as f32 / rheight as f32);
-        (fmul(width, hratio), rheight)
+        (fmul(rheight, dratio), rheight)
     }
 }
 
@@ -294,13 +297,8 @@ pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> Positi
     glyph.into_unpositioned().positioned(Point { x: new_x as f32, y: new_y as f32 })
 }
 
-pub fn center_text_in_area<'a, 'b>(layout_: LayoutIter<'a, 'b>, width: u32, height: u32)
-    -> iter::Map<LayoutIter<'a, 'b>, impl FnMut(PositionedGlyph<'a>) -> PositionedGlyph<'a>> {
-    assert!(width <= i32::max_value() as u32);
-    assert!(height <= i32::max_value() as u32);
-    let (width, height) = (width as i32, height as i32);
-
-    let mut layout = layout_.clone().flat_map(|g| g.pixel_bounding_box());
+pub fn size_of_text(layout: &LayoutIter) -> (u32, u32) {
+    let mut layout = layout.clone().flat_map(|g| g.pixel_bounding_box());
 
     // get the text dimensions by subtracting the low point on the far left
     // from the high point on the far right
@@ -309,13 +307,20 @@ pub fn center_text_in_area<'a, 'b>(layout_: LayoutIter<'a, 'b>, width: u32, heig
 
     let Vector { x: text_width, y: text_height } = max - min;
 
+    (text_width as u32, text_height as u32)
+}
+
+pub fn center_text_in_area<'a, 'b>(layout: LayoutIter<'a, 'b>, width: u32, height: u32)
+    -> iter::Map<LayoutIter<'a, 'b>, impl FnMut(PositionedGlyph<'a>) -> PositionedGlyph<'a>> {
+    let (text_width, text_height) = size_of_text(&layout);
+
     assert!(text_width <= width, "text too wide: {} <= {}", text_width, width);
     assert!(text_height <= height, "text too tall: {} <= {}", text_height, height);
 
     let x = (width - text_width) as f32 / 2.0;
     let y = (height - text_height) as f32 / 2.0;
 
-    layout_.map(move |g| {
+    layout.map(move |g| {
         let pos = g.position() + Vector { x, y };
         g.into_unpositioned().positioned(pos)
     })
@@ -409,4 +414,9 @@ impl Outline {
             )
             .for_each(|(x, y)| i.put_pixel(x, y, color.to_rgba()))
     }
+}
+
+#[test]
+fn test_dimen_fill_area() {
+    assert_eq!(dimen_fill_area((1280, 955), (1280, 640)), (857, 640))
 }
