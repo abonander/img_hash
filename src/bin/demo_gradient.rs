@@ -28,7 +28,7 @@ fn main() -> Result<(), String> {
     println!("generating Gradient hash demo");
 
     println!("generating grayscale animation");
-    let grayscale_anim = ctxt.animate_grayscale(&ctxt.images[0], 500, 25);
+    let grayscale_anim = ctxt.animate_grayscale(&ctxt.images[0], 1000, 25);
 
     let ref grayscale = grayscale_anim.last().unwrap().buffer().clone();
 
@@ -40,7 +40,7 @@ fn main() -> Result<(), String> {
 
         s.spawn(move |s| {
             println!("generating resize animation");
-            let resize_anim = ctxt.animate_resize(grayscale, HASH_WIDTH, HASH_HEIGHT, 500, 25);
+            let resize_anim = ctxt.animate_resize(grayscale, HASH_WIDTH, HASH_HEIGHT, 2000, 25);
 
             s.spawn(move |s| {
                 println!("saving resize animation");
