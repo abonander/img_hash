@@ -22,13 +22,14 @@ macro_rules! handle(
 );
 
 fn main() -> Result<(), String> {
-    let ref ctxt = DemoCtxt::init("demo_gradient", "HashAlg::Gradient")?;
+    let purpose = "Demos `HashAlg::Gradient` for FILE";
+    let ref ctxt = DemoCtxt::init("demo_gradient", purpose, 1)?;
 
     println!("generating Gradient hash demo");
 
     println!("generating grayscale animation");
     // 4 FPS over 5 seconds
-    let grayscale_anim = ctxt.animate_grayscale(&ctxt.image, 20, 25);
+    let grayscale_anim = ctxt.animate_grayscale(&ctxt.images[0], 20, 25);
 
     let ref grayscale = grayscale_anim.last().unwrap().buffer().clone();
 
