@@ -55,8 +55,9 @@ fn main() -> Result<(), String> {
     hash_1_str.insert_str(0, ":");
 
     let (hash_1_x, hash_1_y) = (thumb_1_x + fmul(thumb_width, 1.05), thumb_1_y);
+    let hash_text_size = Scale::uniform(thumb_width as f32 / 1.5);
 
-    let hash_1_layout = ctxt.font.layout(&hash_1_str, Scale::uniform(thumb_width as f32 / 1.5),
+    let hash_1_layout = ctxt.font.layout(&hash_1_str, hash_text_size,
                                          point_f32(hash_1_x, hash_1_y));
 
     let (hash_1_width, hash_1_height) = size_of_text(&hash_1_layout);
@@ -106,13 +107,13 @@ fn main() -> Result<(), String> {
 
     let (hash_2_x, hash_2_y) = (hash_1_x, thumb_2_y);
 
-    let hash_2_layout = ctxt.font.layout(&hash_2_str, Scale::uniform(thumb_width as f32 / 1.5),
+    let hash_2_layout = ctxt.font.layout(&hash_2_str, hash_text_size,
                                          point_f32(hash_2_x, hash_2_y));
 
     let (hash_2_width, hash_2_height) = size_of_text(&hash_2_layout);
     let hash_2_y = thumb_2_y + (thumb_width - hash_2_height) / 2;
 
-    println!("generating first hash animation");
+    println!("generating second hash animation");
     let hash_2_anim: Vec<_> = lerp_iter(hash_2_x, hash_2_x + hash_2_width, 500, 25).map(
         |(alpha_x, frame_delay)| {
             let mut frame = resize_anim_2.last().unwrap().buffer().clone();
@@ -140,9 +141,10 @@ fn main() -> Result<(), String> {
     let outline = Outline::new(char_width as u32, thumb_2_y - thumb_1_y + char_height,
                                fmul(char_width as u32, 0.1));
 
+    let compare_frame_delay = 60;
     let compare_text_y = fmul(thumb_2_y, 1.5);
     let mut count = 0;
-    let compare_anim: Vec<_> = hash_1_layout.skip(1).enumerate().map(|(i, g)| {
+    let mut compare_anim: Vec<_> = hash_1_layout.skip(1).enumerate().map(|(i, g)| {
         let mut frame = hash_2_anim[0].buffer().clone();
 
         let Point { x, .. } = g.position();
@@ -162,7 +164,8 @@ fn main() -> Result<(), String> {
         let text = format!("{}{}{} {}{}", left, if bit { "≠" } else { "=" }, right, count,
                             if bit {"+"} else {""});
 
-        let layout = center_text_in_area(ctxt.layout_text(&text, 0, compare_text_y),
+        let layout = center_text_in_area(
+            ctxt.font.layout(&text, hash_text_size, point_f32(0, compare_text_y)),
             ctxt.width, gif_height - compare_text_y
         );
 
@@ -170,8 +173,30 @@ fn main() -> Result<(), String> {
             draw_glyph(&mut frame, &g, &color);
         }
 
-        Frame::from_parts(frame, 0, 0, 60.into())
+        Frame::from_parts(frame, 0, 0, compare_frame_delay.into())
     }).collect();
+
+    let mut final_frame = hash_2_anim[0].buffer().clone();
+
+    // NB: if you change `hash_width * hash_height` this needs to be updated
+    let (desc_text, color) = match count {
+        0 => ("STRONG MATCH", GREEN),
+        1 ... 4 => ("VERY SIMILAR", GREEN),
+        _ => ("DIFFERENT", RED),
+    };
+
+    let text = format!("={} {}", count, desc_text);
+
+    let layout = center_text_in_area(
+        ctxt.font.layout(&text, hash_text_size, point_f32(0, compare_text_y)),
+        ctxt.width, gif_height - compare_text_y
+    );
+
+    for g in layout {
+        draw_glyph(&mut final_frame, &g, &color);
+    }
+
+    compare_anim.push(Frame::from_parts(final_frame, 0, 0, compare_frame_delay.into()));
 
     println!("combining stages");
     let frames = resize_anim_1.into_iter()
