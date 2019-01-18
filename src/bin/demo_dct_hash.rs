@@ -29,7 +29,7 @@ fn main() -> Result<(), String> {
 
     println!("generating grayscale animation");
     // 4 FPS over 5 seconds
-    let grayscale_anim = ctxt.animate_grayscale(&ctxt.images[0], 20, 25);
+    let grayscale_anim = ctxt.animate_grayscale(&ctxt.images[0], 500, 25);
 
     let ref grayscale = grayscale_anim.last().unwrap().buffer().clone();
 
@@ -42,7 +42,7 @@ fn main() -> Result<(), String> {
 
         s.spawn(move |s| {
             println!("generating resize animation");
-            let resize_anim = ctxt.animate_resize(grayscale, DCT_WIDTH, DCT_HEIGHT, 20, 25);
+            let resize_anim = ctxt.animate_resize(grayscale, DCT_WIDTH, DCT_HEIGHT, 500, 25);
 
             s.spawn(move |_| {
                 println!("saving resize animation");

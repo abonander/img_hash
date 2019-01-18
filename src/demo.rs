@@ -106,11 +106,11 @@ impl DemoCtxt {
             .map_err(explain!("failed to write gif frames to {}", path.display()))
     }
 
-    pub fn animate_grayscale(&self, i: &RgbaImage, frame_cnt: u32, frame_delay: u16) -> Vec<Frame> {
+    pub fn animate_grayscale(&self, i: &RgbaImage, ms: u16, fps: u16) -> Vec<Frame> {
         let (width, height) = self.resize_dimensions(i);
         let resized = imageops::resize(i, width, height, Lanczos3);
 
-        frame_iter(frame_cnt).map(|f| {
+        lerp_iter(255, 0, ms, fps).map(|(alpha, frame_delay)| {
             Frame::from_parts(RgbaImage::from_fn(width, height, |x, y| {
                 let mut px = resized.get_pixel(x, y).clone();
 
