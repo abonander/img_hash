@@ -126,20 +126,17 @@ impl DemoCtxt {
         }).collect()
     }
 
-    pub fn animate_resize(&self, i: &RgbaImage, rwidth: u32, rheight: u32, frame_cnt: u32,
-                          frame_delay: u16) -> Vec<Frame> {
-        let (width, height) = i.dimensions();
+    pub fn animate_resize(&self, i: &RgbaImage, rwidth: u32, rheight: u32, ms: u16, fps: u16)
+        -> Vec<Frame> {
+        let (iwidth, iheight) = i.dimensions();
 
-        let mut frames: Vec<_> = frame_iter(frame_cnt).map(|f| {
-            let mut frame = RgbaImage::from_pixel(width, height,
-                                                  Rgba::from_channels(255, 255, 255, 255));
-
-            let [nwidth, nheight] = lerp(&[width as f32, height as f32],
-                                         &[rwidth as f32, rheight as f32], &f);
-            let (nwidth, nheight) = (nwidth as u32, nheight as u32);
+        let start = [iwidth, iheight];
+        let end = [rwidth, rheight];
+        let mut frames: Vec<_> = lerp_iter(start, end, ms, fps).map(
+            |([nwidth, nheight], frame_delay)| {
+            let mut frame = rgba_fill_white(iwidth, iheight);
             // offset so the image shrinks toward center
-            let left = width / 2 - (nwidth / 2);
-            let top = height / 2 - (nheight / 2);
+            let (left, top) = center_at_point(iwidth / 2, iheight / 2, nwidth, nheight);
 
             let resized = imageops::resize(i, nwidth, nheight, Lanczos3);
             imageops::overlay(&mut frame, &resized, left, top);
@@ -149,10 +146,15 @@ impl DemoCtxt {
 
         // blow up the final frame using Nearest filter so we can see the individual pixels
         let smallest = imageops::resize(i, 8, 8, Lanczos3);
-        let (width, height) = self.resize_dimensions(&smallest);
-        let last = imageops::resize(&smallest, width, height, Nearest);
+        let (nwidth, nheight) = dimen_fill_area(smallest.dimensions(), (iwidth, iheight));
+        let resized = imageops::resize(&smallest, nwidth, nheight, Nearest);
 
-        frames.push(Frame::new(last));
+        let (left, top) = center_at_point(iwidth / 2, iheight / 2, nwidth, nheight);
+        let mut last = rgba_fill_white(iwidth, iheight);
+        imageops::overlay(&mut last, &resized, left, top);
+
+        let frame_delay = frames.last().unwrap().delay();
+        frames.push(Frame::from_parts(last, 0, 0, frame_delay));
 
         frames
     }
@@ -275,8 +277,8 @@ pub fn draw_glyph_sampled(buf: &mut RgbaImage, glyph: &PositionedGlyph,
 /// Given a point and the width and height of an object, give coordinates that will center
 /// it on that point
 pub fn center_at_point(x: u32, y: u32, width: u32, height: u32) -> (u32, u32) {
-    assert!(x > (width / 2));
-    assert!(y > (height / 2));
+    assert!(x >= (width / 2));
+    assert!(y >= (height / 2));
 
     (x - width / 2, y - height / 2)
 }
@@ -418,5 +420,6 @@ impl Outline {
 
 #[test]
 fn test_dimen_fill_area() {
-    assert_eq!(dimen_fill_area((1280, 955), (1280, 640)), (857, 640))
+    assert_eq!(dimen_fill_area((1280, 955), (1280, 640)), (857, 640));
+    assert_eq!(dimen_fill_area((8, 8), (1280, 640)), (640, 640));
 }
