@@ -314,8 +314,6 @@ fn animate_mean(ctxt: &DemoCtxt, data: &RgbaImage) -> (Vec<Frame>, u8) {
     let outline_thickness = fmul(pixel_width, 0.1);
     let px_outline = Outline::new(pixel_width, pixel_height, outline_thickness);
 
-    let mut mean = data.get_pixel(0, 0).to_luma()[0];
-
     let (resized_x, resized_y) = center_at_point(ctxt.width / 4, gif_height / 2,
                                                  resize_width, resize_height);
 
@@ -337,6 +335,10 @@ fn animate_mean(ctxt: &DemoCtxt, data: &RgbaImage) -> (Vec<Frame>, u8) {
     let (mean_x, mean_y) = center_at_point(target_x, target_y, mean_width, mean_height);
 
     let (end_x, end_y) = center_at_point(target_x, target_y, pixel_width, pixel_height);
+
+    let mut sum: u32 = 0;
+    let mut count: u32 = 0;
+    let mut mean = data.get_pixel(0, 0).to_luma()[0];
 
     // macros don't capture for their lifetime but they can access locals
     macro_rules! animate (
@@ -372,7 +374,9 @@ fn animate_mean(ctxt: &DemoCtxt, data: &RgbaImage) -> (Vec<Frame>, u8) {
                     px_outline.draw(&mut frame, next_x, next_y, outline_color);
                     i += 1;
                 } else {
-                    mean = ((mean as u16 + px.to_luma()[0] as u16) / 2) as u8;
+                    sum += px.to_luma()[0] as u32;
+                    count += 1;
+                    mean = (sum / count) as u8;
                     draw_mean!();
                     inflight.remove(i);
                     // `i` does not change as we have to revisit the index
