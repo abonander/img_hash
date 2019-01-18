@@ -28,7 +28,6 @@ fn main() -> Result<(), String> {
     println!("generating Gradient hash demo");
 
     println!("generating grayscale animation");
-    // 4 FPS over 5 seconds
     let grayscale_anim = ctxt.animate_grayscale(&ctxt.images[0], 500, 25);
 
     let ref grayscale = grayscale_anim.last().unwrap().buffer().clone();
