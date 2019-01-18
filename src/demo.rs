@@ -110,14 +110,15 @@ impl DemoCtxt {
         let (width, height) = self.resize_dimensions(i);
         let resized = imageops::resize(i, width, height, Lanczos3);
 
-        lerp_iter(255, 0, ms, fps).map(|(alpha, frame_delay)| {
+        let (frame_delay, frame_cnt) = frame_delay_cnt(ms, fps);
+        frame_iter(frame_cnt as u32).map(|aweight| {
             Frame::from_parts(RgbaImage::from_fn(width, height, |x, y| {
                 let mut px = resized.get_pixel(x, y).clone();
 
                 // to desaturate, blend `px` with its B&w version, scaling the alpha
                 let max_alpha = px[3];
                 let mut desat = px.to_luma_alpha();
-                desat[1] = lerp(&0., &(max_alpha as f32), &f) as u8;
+                desat[1] = lerp(&0, &max_alpha, &aweight);
 
                 px.blend(&desat.to_rgba());
 
