@@ -146,7 +146,7 @@ impl DemoCtxt {
         }).collect();
 
         // blow up the final frame using Nearest filter so we can see the individual pixels
-        let smallest = imageops::resize(i, 8, 8, Lanczos3);
+        let smallest = imageops::resize(i, rwidth, rheight, Lanczos3);
         let (nwidth, nheight) = dimen_fill_area(smallest.dimensions(), (iwidth, iheight));
         let resized = imageops::resize(&smallest, nwidth, nheight, Nearest);
 
