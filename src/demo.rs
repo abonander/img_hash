@@ -49,7 +49,7 @@ impl DemoCtxt {
 
         if args.len() != 3 + img_cnt {
             let file_args = if img_cnt == 1 {
-                "[FILE]"
+                "[FILE]".to_string()
             } else {
                 (1 ..= img_cnt).map(|i| format!("[FILE {}]", i)).collect::<Vec<_>>().join(" ")
             };
@@ -63,15 +63,16 @@ impl DemoCtxt {
             process::exit(0);
         }
 
-        let output_dir = args[img_cnt + 1].into();
+        let output_dir = PathBuf::from(&args[img_cnt + 1]);
         let width = args[img_cnt + 2].parse()
             .map_err(explain!("could not parse WIDTH: {}", args[img_cnt + 2]))?;
 
-        let images = args[1 .. img_cnt + 1].map(|file|
+        let images = args[1 .. img_cnt + 1].iter().map(|file|
             image::open(file).map(|i| i.to_rgba()).map_err(explain!("failed to open {}", file))
         ).collect::<Result<Vec<_>, _>>()?;
 
-        fs::create_dir_all(output).map_err(explain!("failed to create output dir {}", output))?;
+        fs::create_dir_all(&output_dir)
+            .map_err(explain!("failed to create output dir {}", output_dir.display()))?;
 
         Ok(Self {
             images,
@@ -255,7 +256,7 @@ pub fn draw_glyph(buf: &mut RgbaImage, glyph: &PositionedGlyph, color: &Rgb<u8>)
 }
 
 pub fn draw_glyph_sampled(buf: &mut RgbaImage, glyph: &PositionedGlyph,
-                          sample: impl FnMut(u32, u32) -> Rgba<u8>) {
+                          mut sample: impl FnMut(u32, u32) -> Rgba<u8>) {
 
     let Point { x, y } = glyph.position();
     let (pos_x, pos_y) = (x as u32, y as u32);
