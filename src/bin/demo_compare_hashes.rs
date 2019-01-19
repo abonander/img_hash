@@ -4,6 +4,8 @@ extern crate rayon;
 use img_hash::demo::*;
 use img_hash::{HasherConfig, ImageHash};
 
+use std::iter;
+
 fn hash_to_string(hash: &ImageHash) -> String {
     hash.as_bytes().iter().map(|b| format!("{:08b}", b)).collect()
 }
@@ -38,17 +40,24 @@ fn main() -> Result<(), String> {
         (gif_height - img_1_height) / 2
     );
 
+    let mut resize_1_start = rgba_fill_white(ctxt.width, gif_height);
+    imageops::overlay(&mut resize_1_start, &img_1_large, img_1_start_x, img_1_start_y);
+    
+    let resize_1_start = Frame::from_parts(resize_1_start, 0, 0, 500.into());
+
     let lerp_1_start = [img_1_start_x, img_1_start_y, img_1_width, img_1_height];
     let lerp_1_end = [thumb_1_x, thumb_1_y, thumb_width, thumb_height];
 
     println!("generating first resize animation");
-    let resize_anim_1: Vec<_> = lerp_iter(lerp_1_start, lerp_1_end, 1000, 15).map(
-        |([x, y, width, height], frame_delay)| {
-            let mut frame = rgba_fill_white(ctxt.width, gif_height);
-            let resized = imageops::resize(&img_1_large, width, height, Lanczos3);
-            imageops::overlay(&mut frame, &resized, x, y);
-            Frame::from_parts(frame, 0, 0, frame_delay.into())
-        }
+    let resize_anim_1: Vec<_> = iter::once(resize_1_start).chain(
+        lerp_iter(lerp_1_start, lerp_1_end, 1000, 15).map(
+            |([x, y, width, height], frame_delay)| {
+                let mut frame = rgba_fill_white(ctxt.width, gif_height);
+                let resized = imageops::resize(&img_1_large, width, height, Lanczos3);
+                imageops::overlay(&mut frame, &resized, x, y);
+                Frame::from_parts(frame, 0, 0, frame_delay.into())
+            }
+        )
     ).collect();
 
     let mut hash_1_str = hash_to_string(&hash_1);
@@ -89,17 +98,24 @@ fn main() -> Result<(), String> {
         (gif_height - img_2_height) / 2
     );
 
+    let mut resize_2_start = hash_1_anim[0].buffer().clone();
+    imageops::overlay(&mut resize_2_start, &img_2_large, img_2_start_x, img_2_start_y);
+
+    let resize_2_start = Frame::from_parts(resize_2_start, 0, 0, 250.into());
+
     let lerp_2_start = [img_2_start_x, img_2_start_y, img_2_width, img_2_height];
     let lerp_2_end = [thumb_2_x, thumb_2_y, thumb_width, thumb_height];
     
     println!("generating second resize animation");
-    let resize_anim_2: Vec<_> = lerp_iter(lerp_2_start, lerp_2_end, 1000, 15).map(
-        |([x, y, width, height], frame_delay)| {
-            let mut frame = hash_1_anim[0].buffer().clone();
-            let resized = imageops::resize(&img_2_large, width, height, Lanczos3);
-            imageops::overlay(&mut frame, &resized, x, y);
-            Frame::from_parts(frame, 0, 0, frame_delay.into())
-        }
+    let resize_anim_2: Vec<_> = iter::once(resize_2_start).chain(
+            lerp_iter(lerp_2_start, lerp_2_end, 1000, 15).map(
+            |([x, y, width, height], frame_delay)| {
+                let mut frame = hash_1_anim[0].buffer().clone();
+                let resized = imageops::resize(&img_2_large, width, height, Lanczos3);
+                imageops::overlay(&mut frame, &resized, x, y);
+                Frame::from_parts(frame, 0, 0, frame_delay.into())
+            }
+        )
     ).collect();
 
     let mut hash_2_str = hash_to_string(&hash_2);
@@ -114,7 +130,7 @@ fn main() -> Result<(), String> {
     let hash_2_y = thumb_2_y + (thumb_width - hash_2_height) / 2;
 
     println!("generating second hash animation");
-    let hash_2_anim: Vec<_> = lerp_iter(hash_2_x, hash_2_x + hash_2_width, 500, 25).map(
+    let hash_2_anim: Vec<_> = lerp_iter(hash_2_x, hash_2_x + hash_2_width, 250, 25).map(
         |(alpha_x, frame_delay)| {
             let mut frame = resize_anim_2.last().unwrap().buffer().clone();
 
