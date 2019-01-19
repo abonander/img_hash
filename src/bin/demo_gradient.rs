@@ -4,6 +4,7 @@ extern crate rayon;
 extern crate rusttype;
 
 use img_hash::demo::*;
+use std::cmp;
 
 const HASH_WIDTH: u32 = 9;
 const HASH_HEIGHT: u32 = 8;
@@ -91,7 +92,7 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
     // configure an outline with 20% thickness
     let outline = Outline::new(pixel_width * 2, pixel_height, fmul(pixel_width, 0.1));
 
-    let mut bitstring = Bitstring::new();
+    let mut bitstring = String::new();
 
     // we touch HASH_HEIGHT * (HASH_WIDTH - 1) pixels
     x_y_iter(HASH_WIDTH - 1, HASH_HEIGHT).map(|(x, y)| {
@@ -120,7 +121,7 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
 
             // between the two pixels draw either `<` or `>`
             let comp = if bit { '>' } else if eq { '=' } else { '<' };
-            bitstring.push_bit(bit);
+            bitstring.push(if bit { '1' } else { '0' });
 
             let comp_glyph = center_in_area(
                 ctxt.font.glyph(comp)
@@ -133,14 +134,28 @@ fn animate_gradient(ctxt: &DemoCtxt, grayscale: &RgbaImage) -> Vec<Frame> {
 
             draw_glyph(&mut frame, &comp_glyph, &bit_color);
 
-            // place the string just after the horizontal halfway point with some padding
-            let string_x = fmul(ctxt.width / 2, 1.1);
-            let string_y = gif_height * 3 / 4;
-            ctxt.layout_text(bitstring.as_str(), string_x, string_y).enumerate()
-                .for_each(|(i, g)| {
-                    let color = if i + 1 == bitstring.as_str().len() { bit_color } else { BLACK };
-                    draw_glyph(&mut frame, &g, &color)
-                });
+            let mut i = 0;
+            // place the string just after the image
+            let text_x = ctxt.width / 2;
+            let mut text_y = pixel_y + fmul(pixel_height, 1.1);
+
+            let line_len = HASH_WIDTH as usize -1;
+            while i < bitstring.len() {
+                let line = &bitstring[i .. cmp::min(i + line_len, bitstring.len())];
+                let layout = ctxt.layout_text(line, text_x, text_y);
+                let (_, text_height) = size_of_text(&layout);
+                let layout = center_text_in_area(layout, ctxt.width / 2, text_height);
+
+                for (j, g) in layout.enumerate() {
+                    let color = if i + j == (y * HASH_WIDTH + x) as usize { bit_color } else { BLACK };
+                    draw_glyph(&mut frame, &g, &color);
+                }
+
+                // position next line of text just below
+                text_y += fmul(text_height, 1.05);
+
+                i += line_len;
+            }
 
             // run faster after the first couple rows
             let delay = if y < 2 { 50 } else { 8 };

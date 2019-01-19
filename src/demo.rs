@@ -301,12 +301,14 @@ pub fn center_in_area(glyph: PositionedGlyph, width: u32, height: u32) -> Positi
 }
 
 pub fn size_of_text(layout: &LayoutIter) -> (u32, u32) {
-    let mut layout = layout.clone().flat_map(|g| g.pixel_bounding_box());
+    let layout = layout.clone().flat_map(|g| g.pixel_bounding_box());
 
     // get the text dimensions by subtracting the low point on the far left
     // from the high point on the far right
-    let min = layout.next().map_or(Point { x: 0, y: 0 }, |bb| bb.min);
-    let max = layout.last().map_or(Point { x: 0, y: 0 }, |bb| bb.max);
+    let Rect { min, .. } = layout.clone().next().expect("text was empty");
+    let Rect { max, .. } = layout.last().expect("text was empty");
+
+    assert!(max >= min, "bad rects: {:?} {:?}", min, max);
 
     let Vector { x: text_width, y: text_height } = max - min;
 
