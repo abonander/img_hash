@@ -20,14 +20,14 @@ rust-image = ["image"]
 bench = []
 
 [dependencies]
-bit-vec = "0.4"
+bit-vec = "0.5"
 rustc-serialize = "0.3"
 
 [dev-dependencies]
-rand = "0.3"
-image = ">=0.10, <=0.19"
+rand = "0.6"
+image = "0.21"
 
 [dependencies.image]
-version = ">=0.10, <=0.19"
+version = "0.21"
 optional = true
 

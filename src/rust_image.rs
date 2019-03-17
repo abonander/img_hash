@@ -13,7 +13,7 @@ use image::{
     GrayAlphaImage,
     RgbImage,
     RgbaImage,
-    GenericImage,
+    GenericImageView,
     Pixel
 };
 
@@ -43,7 +43,7 @@ macro_rules! hash_img_impl {
             }
 
             fn channel_count() -> u8 {
-                <<Self as GenericImage>::Pixel as Pixel>::channel_count()
+                <<Self as GenericImageView>::Pixel as Pixel>::channel_count()
             }
 
             fn foreach_pixel<F>(&self, mut iter_fn: F) where F: FnMut(u32, u32, &[u8]) {
@@ -65,7 +65,7 @@ impl HashImage for DynamicImage {
             type Grayscale = GrayImage;
 
             fn dimensions(&self) -> (u32, u32) {
-                <Self as GenericImage>::dimensions(self) 
+                <Self as GenericImageView>::dimensions(self)
             }
 
             fn resize(&self, width: u32, height: u32) -> Self {
@@ -81,7 +81,7 @@ impl HashImage for DynamicImage {
             }
 
             fn channel_count() -> u8 {
-                <<Self as GenericImage>::Pixel as Pixel>::channel_count()
+                <<Self as GenericImageView>::Pixel as Pixel>::channel_count()
             }
 
             fn foreach_pixel<F>(&self, mut iter_fn: F) where F: FnMut(u32, u32, &[u8]) {

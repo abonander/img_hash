@@ -499,7 +499,8 @@ mod test {
 
     use image::{Rgba, ImageBuffer};
 
-    use self::rand::{weak_rng, Rng};
+    use self::rand::{FromEntropy, RngCore};
+    use self::rand::rngs::SmallRng;
 
     use super::{DCT2DFunc, HashType, ImageHash};
 
@@ -509,7 +510,8 @@ mod test {
         let len = (width * height * 4) as usize;
         let mut buf = Vec::with_capacity(len);
         unsafe { buf.set_len(len); } // We immediately fill the buffer.
-        weak_rng().fill_bytes(&mut *buf);
+        let mut small_rng = SmallRng::from_entropy();
+        small_rng.fill_bytes(&mut *buf);
 
         ImageBuffer::from_raw(width, height, buf).unwrap()
     }
