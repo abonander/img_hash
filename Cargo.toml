@@ -41,16 +41,4 @@ name = "byte_to_float"
 harness = false
 
 [[bin]]
-name = "demo_gradient"
-required-features = ["demo"]
-
-[[bin]]
-name = "demo_dct_hash"
-required-features = ["demo"]
-
-[[bin]]
-name = "demo_compare_hashes"
-required-features = ["demo"]
-
-[[bin]]
 name = "hash_image"

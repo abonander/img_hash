@@ -63,9 +63,6 @@ mod dct;
 #[allow(missing_docs)]
 pub mod dct;
 
-#[cfg(feature = "demo")]
-pub mod demo;
-
 use dct::DctCtxt;
 
 mod alg;
