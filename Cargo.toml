@@ -17,9 +17,7 @@ repository = "http://github.com/abonander/img_hash"
 edition = "2015"
 
 [features]
-bench = []
 nightly = []
-demo = ["interpolation", "rayon", "rusttype"]
 
 [dependencies]
 base64 = "0.10"
@@ -28,29 +26,12 @@ rustdct = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.1"
 
-# used in src/bin/demo_*.rs
-interpolation = { version = "0.2", optional = true }
-rayon = { version = "1.0", optional = true }
-rusttype  = { version = "0.7", optional = true }
-
 [dev-dependencies]
 criterion = "0.2"
 
 [[bench]]
 name = "byte_to_float"
 harness = false
-
-[[bin]]
-name = "demo_gradient"
-required-features = ["demo"]
-
-[[bin]]
-name = "demo_dct_hash"
-required-features = ["demo"]
-
-[[bin]]
-name = "demo_compare_hashes"
-required-features = ["demo"]
 
 [[bin]]
 name = "hash_image"
