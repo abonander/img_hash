@@ -64,7 +64,7 @@ pub(crate) use traits::BitSet;
 /// Playing with the various options on this struct allows you to tune the performance of image
 /// hashing to your needs.
 ///
-/// Sane, reasonably fast are provided by the [`::new()`](#method.new) constructor. If
+/// Sane, reasonably fast defaults are provided by the [`::new()`](#method.new) constructor. If
 /// you just want to start hashing images and don't care about the details, it's as simple as:
 ///
 /// ```rust
