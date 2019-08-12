@@ -55,8 +55,6 @@ macro_rules! gen_hash {
     })
 }
 
-//noinspection RsNeedlessLifetimes
-// false positive
 fn block_adder<'a, T: AddAssign + 'a>(blocks: &'a mut [T], width: u32) -> impl FnMut(u32, u32, T) + 'a {
     move |x, y, add| (blocks[(y as usize) * (width as usize) + (x as usize)] += add)
 }
