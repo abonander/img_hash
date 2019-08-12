@@ -28,8 +28,8 @@
 //!     let hash1 = ImageHash::hash(&image1, 8, HashType::Gradient);
 //!     let hash2 = ImageHash::hash(&image2, 8, HashType::Gradient);
 //!     
-//!     println!("Image1 hash: {}", hash1.to_base64());
-//!     println!("Image2 hash: {}", hash2.to_base64());
+//!     println!("Image1 hash: {:?}", hash1.bitv);
+//!     println!("Image2 hash: {:?}", hash2.bitv);
 //!     
 //!     println!("% Difference: {}", hash1.dist_ratio(&hash2));
 //! }
@@ -44,11 +44,11 @@ extern crate bit_vec;
 #[cfg(any(test, feature = "rust-image"))]
 extern crate image;
 
-extern crate rustc_serialize as serialize;
+#[cfg(any(test, feature = "serialize"))]
+extern crate serde;
 
-use serialize::base64::{ToBase64, FromBase64, STANDARD};
-// Needs to be fully qualified
-pub use serialize::base64::FromBase64Error;
+#[cfg(any(test, feature = "serialize"))]
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
 
 use bit_vec::BitVec;
 
@@ -69,6 +69,8 @@ pub use dct::precompute_dct_matrix;
 /// For efficiency, does not retain a copy of the image data after hashing.
 ///
 /// Get an instance with `ImageHash::hash()`.
+
+#[cfg_attr(any(test, feature = "serialize"), derive(Serialize, Deserialize))]
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct ImageHash {
     /// The bits of the hash
@@ -130,38 +132,6 @@ impl ImageHash {
         self.bitv.iter()
             .map(|bit| (bit as u8) * 0xff)
             .collect()
-    }
-
-    /// Create an `ImageHash` instance from the given Base64-encoded string.
-    /// ## Note:
-    /// **Not** compatible with Base64-encoded strings created before `HashType` was added.
-    ///
-    /// Does **not** preserve the internal value of `HashType::UserDCT`.
-    /// ## Errors:
-    /// Returns a FromBase64Error::InvalidBase64Length when trying to hash a zero-length string
-    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error>{
-        let mut data = try!(encoded_hash.from_base64());
-        // The hash type should be the first bit of the hash
-        if data.len() == 0 {
-            return Err(FromBase64Error::InvalidBase64Length);
-        }
-        let hash_type = HashType::from_byte(data.remove(0));
-
-        Ok(ImageHash{
-            bitv: BitVec::from_bytes(&*data),
-            hash_type: hash_type,
-        })
-    }
-
-    /// Get a Base64 string representing the bits of this hash.
-    ///
-    /// Mostly for printing convenience.
-    pub fn to_base64(&self) -> String {
-        let mut bytes = self.bitv.to_bytes();
-        // Insert the hash type as the first byte.
-        bytes.insert(0, self.hash_type.to_byte());
-
-        bytes.to_base64(STANDARD)
     }
 }
 
@@ -227,6 +197,7 @@ impl hash::Hash for DCT2DFunc {
 }
 
 /// An enum describing the hash algorithms that `img_hash` offers.
+#[cfg_attr(any(test, feature = "serialize"), derive(Serialize, Deserialize))]
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum HashType { 
     /// This algorithm first averages the pixels of the reduced-size and color image,
@@ -264,10 +235,25 @@ pub enum HashType {
     /// [FFTW][1]. (This cannot be the default implementation because of licensing conflicts.)
     ///
     /// [1]: http://www.fftw.org/
+    #[cfg_attr(any(test, feature = "serialize"), serde(serialize_with = "se_userdct", deserialize_with = "de_userdct"))]
     UserDCT(DCT2DFunc),
     /// Discourage complete matches for backwards-compatibility.
     #[doc(hidden)]
     __BackCompat,
+}
+
+#[cfg(any(test, feature = "serialize"))]
+fn se_userdct<S>(_v: &DCT2DFunc, s: S) -> Result<S::Ok, S::Error>
+    where S: Serializer
+{
+    s.serialize_bool(true)
+}
+
+#[cfg(any(test, feature = "serialize"))]
+fn de_userdct<'de, D>(_d: D) -> Result<DCT2DFunc, D::Error>
+    where D: Deserializer<'de>
+{
+    Ok(DCT2DFunc(dct_2d))
 }
 
 impl HashType {
@@ -282,34 +268,6 @@ impl HashType {
             DoubleGradient => double_gradient_hash(img, hash_size),
             UserDCT(dct_2d_func) => dct_hash(img, hash_size, dct_2d_func),
             __BackCompat => panic!("`HashType::__BackCompat` is not an actual hash algorithm"),
-        }
-    }
-
-    fn to_byte(self) -> u8 {
-        use HashType::*;
-
-        match self {
-            Mean => 1,
-            Block => 6,
-            DCT => 2,
-            Gradient => 3,
-            DoubleGradient => 4,
-            UserDCT(_) => 5,
-            __BackCompat => panic!("`HashType::__BackCompat` is not an actual hash algorithm"),
-        }
-    }
-
-    fn from_byte(byte: u8) -> HashType {
-        use HashType::*;
-
-        match byte {
-            1 => Mean,
-            2 => DCT,
-            3 => Gradient,
-            4 => DoubleGradient,
-            5 => UserDCT(DCT2DFunc(dct_2d)),
-            6 => Block,
-            _ => panic!("Byte {:?} cannot be coerced to a `HashType`!", byte),
         }
     }
 }
@@ -493,9 +451,9 @@ fn crop_2d_dct(packed: &[f64], original: (usize, usize), new: (usize, usize)) ->
 
 #[cfg(test)]
 mod test {
-    extern crate rand;
+    extern crate bincode;
 
-    use serialize::base64::*;
+    extern crate rand;
 
     use image::{Rgba, ImageBuffer};
 
@@ -591,23 +549,14 @@ mod test {
     }
 
     #[test]
-    fn base64_encoding_decoding() {
+    fn serialize_deserialize() {
         let test_img = gen_test_img(1024, 1024);
         let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
 
-        let base64_string = hash1.to_base64();
-        let decoded_result = ImageHash::from_base64(&*base64_string);
+        let binary = bincode::serialize(&hash1).unwrap();
+        let decoded_result: ImageHash = bincode::deserialize(&binary).unwrap();
 
-        assert_eq!(decoded_result.unwrap(), hash1);
-    }  
-
-    #[test]
-    fn base64_error_on_empty() {
-        let decoded_result = ImageHash::from_base64("");
-        match decoded_result {
-            Err(InvalidBase64Length) => (),
-            _ => panic!("Expected a invalid length error")
-        };
+        assert_eq!(decoded_result, hash1);
     }
 
     #[cfg(feature = "bench")]

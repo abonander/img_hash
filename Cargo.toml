@@ -17,17 +17,24 @@ repository = "http://github.com/abonander/img_hash"
 [features]
 default = ["rust-image"]
 rust-image = ["image"]
+serialize = ["serde", "bit-vec/serde"]
 bench = []
 
 [dependencies]
-bit-vec = "0.4"
-rustc-serialize = "0.3"
+bit-vec = "0.6"
 
 [dev-dependencies]
 rand = "0.3"
 image = ">=0.10, <=0.19"
+bincode = "1.1"
+bit-vec = { version = "0.6", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
 
 [dependencies.image]
 version = ">=0.10, <=0.19"
 optional = true
 
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+optional = true
