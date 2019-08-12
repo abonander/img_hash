@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 //! A crate that provides several perceptual hashing algorithms for images.
-//! Supports images opened with the [image][1] crate from Piston.
+//! Supports images opened with the [image] crate from Piston.
 //!
 //! ```rust,no_run
 //! extern crate image;
@@ -29,10 +29,8 @@
 //!     println!("Hamming Distance: {}", hash1.dist(&hash2));
 //! }
 //! ```
-//! [1]: https://github.com/PistonDevelopers/image
+//! [image]: https://github.com/PistonDevelopers/image
 #![deny(missing_docs)]
-// Silence feature warnings for test module.
-#![cfg_attr(all(test, feature = "bench"), feature(test))]
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
 extern crate base64;
@@ -56,12 +54,7 @@ use std::borrow::Cow;
 use std::{fmt, ops};
 use std::marker::PhantomData;
 
-#[cfg(not(feature = "bench"))]
 mod dct;
-
-#[cfg(feature = "bench")]
-#[allow(missing_docs)]
-pub mod dct;
 
 use dct::DctCtxt;
 
@@ -78,7 +71,7 @@ pub(crate) use traits::BitSet;
 /// Playing with the various options on this struct allows you to tune the performance of image
 /// hashing to your needs.
 ///
-/// Sane, reasonably fast are provided by the [`::new()`](HasherConfig::new) constructor. If
+/// Sane, reasonably fast are provided by the [`::new()`](#method.new) constructor. If
 /// you just want to start hashing images and don't care about the details, it's as simple as:
 ///
 /// ```rust
@@ -93,7 +86,7 @@ pub(crate) use traits::BitSet;
 /// resilience.
 ///
 /// ### Hash Size
-/// Setter: [`.hash_size()`](HasherConfig::hash_size)
+/// Setter: [`.hash_size()`](#method.hash_size)
 ///
 /// Dimensions of the final hash, as width x height, in bits. A hash size of `8, 8` produces an
 /// 8 x 8 bit (8 byte) hash. Larger hash sizes take more time to compute as well as more memory,
@@ -105,15 +98,15 @@ pub(crate) use traits::BitSet;
 /// (As the author experiments, suggested values will be added here for various algorithms.)
 ///
 /// ### Hash Algorithm
-/// Setter: [`.hash_alg()`](HasherConfig::hash_alg)
-/// Definition: [`HashAlg`](HashAlg)
+/// Setter: [`.hash_alg()`](#method.hash_alg)
+/// Definition: [`HashAlg`](enum.HashAlg.html)
 ///
 /// Multiple methods of calculating image hashes are provided in this crate under the `HashAlg`
 /// enum. Each algorithm is different but they all produce the same size hashes as governed by
 /// `hash_size`.
 ///
 /// ### Hash Bytes Container / `B` Type Param
-/// Use [`with_bytes_type::<B>()`](HasherConfig::with_bytes_type) instead of `new()` to customize.
+/// Use [`with_bytes_type::<B>()`](#method.with_bytes_type) instead of `new()` to customize.
 ///
 /// This hash API allows you to specify the bytes container type for generated hashes. The default
 /// allows for any arbitrary hash size (see above) but requires heap-allocation. Instead, you
@@ -154,13 +147,13 @@ impl HasherConfig<Box<[u8]>> {
         Self::with_bytes_type()
     }
 
-    /// Construct a new config with the selected [`HashBytes`](::HashBytes) impl.
+    /// Construct a new config with the selected [`HashBytes`](trait.HashBytes.html) impl.
     ///
     /// You may opt for an array type which allows inline allocation of hash data.
     ///
     /// ### Note
     /// The default hash size requires 64 bits / 8 bytes of storage. You can change this
-    /// with [`.hash_size()`](HasherConfig::hash_size).
+    /// with [`.hash_size()`](#method.hash_size).
     pub fn with_bytes_type<B_: HashBytes>() -> HasherConfig<B_> {
         HasherConfig {
             width: 8,
@@ -179,13 +172,13 @@ impl<B: HashBytes> HasherConfig<B> {
     ///
     /// The number of bits in the resulting hash will be `width * height`. If you are using
     /// a fixed-size `HashBytes` type then you must ensure it can hold at least this many bits.
-    /// You can check this with [`HashBytes::max_bits()`](HashBytes::max_bits).
+    /// You can check this with [`HashBytes::max_bits()`](#method.max_bits).
     ///
     /// ### Rounding Behavior
     /// Certain hash algorithms need to round this value to function properly:
     ///
-    /// * [`DoubleGradient`](HashAlg::DoubleGradient) rounds to the next multiple of 2;
-    /// * [`Blockhash`](HashAlg::Blockhash) rounds to the next multiple of 4.
+    /// * [`DoubleGradient`](enum.HashAlg.html#variant.DoubleGradient) rounds to the next multiple of 2;
+    /// * [`Blockhash`](enum.HashAlg.html#variant.Blockhash) rounds to the next multiple of 4.
     ///
     /// If the chosen values already satisfy these requirements then nothing is changed.
     ///
@@ -250,17 +243,17 @@ impl<B: HashBytes> HasherConfig<B> {
 
     /// Enable preprocessing with the Difference of Gaussians algorithm with default sigma values.
     ///
-    /// Recommended only for use with [the Blockhash.io algorithm](HashAlg::Blockhash)
+    /// Recommended only for use with [the Blockhash.io algorithm](enum.HashAlg#variant.Blockhash)
     /// as it significantly reduces entropy in the scaled down image for other algorithms.
     ///
-    /// See [`Self::preproc_diff_gauss_sigmas()](HasherConfig::preproc_diff_gauss_sigmas) for more info.
+    /// See [`Self::preproc_diff_gauss_sigmas()](#method.preproc_diff_gauss_sigmas) for more info.
     pub fn preproc_diff_gauss(self) -> Self {
         self.preproc_diff_gauss_sigmas(5.0, 10.0)
     }
 
     /// Enable preprocessing with the Difference of Gaussians algorithm with the given sigma values.
     ///
-    /// Recommended only for use with [the Blockhash.io algorithm](HashAlg::Blockhash)
+    /// Recommended only for use with [the Blockhash.io algorithm](enum.HashAlg#variant.Blockhash)
     /// as it significantly reduces entropy in the scaled down image for other algorithms.
     ///
     /// After the image is converted to grayscale, it is blurred with a Gaussian blur using
@@ -276,7 +269,7 @@ impl<B: HashBytes> HasherConfig<B> {
         Self { gauss_sigmas: Some([sigma_a, sigma_b]), ..self }
     }
 
-    /// Create a [`Hasher`](Hasher) from this config which can be used to hash images.
+    /// Create a [`Hasher`](struct.Hasher.html) from this config which can be used to hash images.
     ///
     /// ### Panics
     /// If the chosen hash size (`width x height`, rounded for the algorithm if necessary)
@@ -326,7 +319,7 @@ impl<B> fmt::Debug for HasherConfig<B> {
 
 /// Generates hashes for images.
 ///
-/// Constructed via [`HasherConfig::to_hasher()`](HasherConfig::to_hasher).
+/// Constructed via [`HasherConfig::to_hasher()`](struct.HasherConfig#method.to_hasher).
 pub struct Hasher<B = Box<[u8]>> {
     ctxt: HashCtxt,
     hash_alg: HashAlg,
@@ -407,8 +400,6 @@ impl HashCtxt {
         }
     }
 }
-
-
 
 /// A struct representing an image processed by a perceptual hash.
 /// For efficiency, does not retain a copy of the image data after hashing.
