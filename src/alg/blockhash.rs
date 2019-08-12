@@ -1,11 +1,3 @@
-// Copyright (c) 2015-2018 The `img_hash` Crate Developers
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-Carlito-Regular-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-Carlito-Regular-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-//
 // Implementation adapted from Python version:
 // https://github.com/commonsmachinery/blockhash-python/blob/e8b009d/blockhash.py
 // Main site: http://blockhash.io
