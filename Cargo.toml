@@ -16,6 +16,8 @@ repository = "http://github.com/abonander/img_hash"
 
 edition = "2015"
 
+readme = "README.md"
+
 [features]
 nightly = []
 
