@@ -13,7 +13,7 @@ use image::{
     GrayAlphaImage,
     RgbImage,
     RgbaImage,
-    GenericImage,
+    GenericImageView,
     Pixel
 };
 
@@ -43,7 +43,7 @@ macro_rules! hash_img_impl {
             }
 
             fn channel_count() -> u8 {
-                <<Self as GenericImage>::Pixel as Pixel>::channel_count()
+                <<Self as GenericImageView>::Pixel as Pixel>::CHANNEL_COUNT
             }
 
             fn foreach_pixel<F>(&self, mut iter_fn: F) where F: FnMut(u32, u32, &[u8]) {
@@ -62,31 +62,31 @@ hash_img_impl! {
 }
 
 impl HashImage for DynamicImage {
-            type Grayscale = GrayImage;
+    type Grayscale = GrayImage;
 
-            fn dimensions(&self) -> (u32, u32) {
-                <Self as GenericImage>::dimensions(self) 
-            }
+    fn dimensions(&self) -> (u32, u32) {
+        <Self as GenericImageView>::dimensions(self) 
+    }
 
-            fn resize(&self, width: u32, height: u32) -> Self {
-                self.resize(width, height, FILTER_TYPE)
-            }
+    fn resize(&self, width: u32, height: u32) -> Self {
+        self.resize(width, height, FILTER_TYPE)
+    }
 
-            fn grayscale(&self) -> GrayImage {
-                imageops::grayscale(self)
-            }
+    fn grayscale(&self) -> GrayImage {
+        imageops::grayscale(self)
+    }
 
-            fn to_bytes(self) -> Vec<u8> {
-                self.raw_pixels()
-            }
+    fn to_bytes(self) -> Vec<u8> {
+        self.raw_pixels()
+    }
 
-            fn channel_count() -> u8 {
-                <<Self as GenericImage>::Pixel as Pixel>::channel_count()
-            }
+    fn channel_count() -> u8 {
+        <<Self as GenericImageView>::Pixel as Pixel>::CHANNEL_COUNT
+    }
 
-            fn foreach_pixel<F>(&self, mut iter_fn: F) where F: FnMut(u32, u32, &[u8]) {
-                for (x, y, px) in self.pixels() {
-                    iter_fn(x, y, px.channels());
-                }
-            }
+    fn foreach_pixel<F>(&self, mut iter_fn: F) where F: FnMut(u32, u32, &[u8]) {
+        for (x, y, px) in self.pixels() {
+            iter_fn(x, y, px.channels());
         }
+    }
+}

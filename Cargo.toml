@@ -24,10 +24,9 @@ bit-vec = "0.4"
 rustc-serialize = "0.3"
 
 [dev-dependencies]
-rand = "0.3"
-image = ">=0.10, <=0.19"
+image = "0.22.2"
 
 [dependencies.image]
-version = ">=0.10, <=0.19"
+version = "0.22.2"
 optional = true
 
