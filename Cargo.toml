@@ -20,7 +20,7 @@ rust-image = ["image"]
 bench = []
 
 [dependencies]
-bit-vec = "0.4"
+bit-vec = "0.6"
 rustc-serialize = "0.3"
 
 [dev-dependencies]
