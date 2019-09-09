@@ -518,7 +518,7 @@ mod test {
 
     use image::{ImageBuffer, Rgba};
 
-    use self::rand::{weak_rng, Rng};
+    use self::rand::{rngs::SmallRng, RngCore, SeedableRng};
 
     use super::{DCT2DFunc, HashType, ImageHash};
 
@@ -531,6 +531,7 @@ mod test {
             buf.set_len(len);
         } // We immediately fill the buffer.
 
+        SmallRng::from_entropy().fill_bytes(&mut *buf);
 
         ImageBuffer::from_raw(width, height, buf).unwrap()
     }

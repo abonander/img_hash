@@ -24,6 +24,7 @@ bit-vec = "0.4"
 rustc-serialize = "0.3"
 
 [dev-dependencies]
+rand = { version = "0.7", features = ["small_rng"] }
 image = "0.22.2"
 
 [dependencies.image]
