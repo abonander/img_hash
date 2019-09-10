@@ -154,11 +154,17 @@ impl ImageHash {
         if data.len() == 0 {
             return Err(FromBase64Error::InvalidBase64Length);
         }
-        let hash_type = HashType::from_byte(data.remove(0));
+
+        let nfo = data.remove(0);
+        let mut bitv = BitVec::from_bytes(&*data);
+
+        // Remove the padded bytes from the bitvec so that the number
+        // of bits matches the original hash that we are decoding
+        bitv.truncate(bitv.len() - (nfo >> 5) as usize);
 
         Ok(ImageHash {
-            bitv: BitVec::from_bytes(&*data),
-            hash_type: hash_type,
+            bitv,
+            hash_type: HashType::from_byte(nfo & 0x1F),
         })
     }
 
@@ -167,8 +173,21 @@ impl ImageHash {
     /// Mostly for printing convenience.
     pub fn to_base64(&self) -> String {
         let mut bytes = self.bitv.to_bytes();
+
+        // bit-vec automatically pads any trailing bits into a full
+        // byte with zeros, which throws off hash comparisons if
+        // using one loaded from the base64 representation because
+        // it looks like it has more bits than were in the original
+        // hash
+        let padding = (bytes.len() * 8 - self.bitv.len()) as u8;
+
+        // We only need a max of 3 bits to store the pad length, so
+        // just stuff it into the top 3 bits and leave the bottom
+        // bits for the hash_type
+        let nfo = self.hash_type.to_byte() | (padding << 5);
+
         // Insert the hash type as the first byte.
-        bytes.insert(0, self.hash_type.to_byte());
+        bytes.insert(0, nfo);
 
         bytes.to_base64(STANDARD)
     }
@@ -615,7 +634,11 @@ mod test {
     #[test]
     fn base64_encoding_decoding() {
         let test_img = gen_test_img(1024, 1024);
-        let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
+
+        // Use doublegradient for a longer hash that will have a few extra bits at the end
+        // to ensure we can encode/decode bitvecs that are not exactly divisible by 8, to
+        // handle how bitvec pads during to_bytes()
+        let hash1 = ImageHash::hash(&test_img, 32, HashType::DoubleGradient);
 
         let base64_string = hash1.to_base64();
         let decoded_result = ImageHash::from_base64(&*base64_string);
