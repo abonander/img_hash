@@ -86,7 +86,7 @@ impl ImageHash {
 
         ImageHash {
             bitv: hash,
-            hash_type: hash_type,
+            hash_type,
         }
     }
 
@@ -151,7 +151,7 @@ impl ImageHash {
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash, FromBase64Error> {
         let mut data = try!(encoded_hash.from_base64());
         // The hash type should be the first bit of the hash
-        if data.len() == 0 {
+        if data.is_empty() {
             return Err(FromBase64Error::InvalidBase64Length);
         }
 
@@ -216,11 +216,11 @@ pub type Rowstride = usize;
 pub struct DCT2DFunc(pub fn(&[f64], Rowstride) -> Vec<f64>);
 
 impl DCT2DFunc {
-    fn as_ptr(&self) -> *const () {
+    fn as_ptr(self) -> *const () {
         self.0 as *const ()
     }
 
-    fn call(&self, data: &[f64], rowstride: Rowstride) -> Vec<f64> {
+    fn call(self, data: &[f64], rowstride: Rowstride) -> Vec<f64> {
         (self.0)(data, rowstride)
     }
 }
@@ -348,9 +348,12 @@ impl HashType {
 fn mean_hash<I: HashImage>(img: &I, hash_size: u32) -> BitVec {
     let hash_values = prepare_image(img, hash_size, hash_size);
 
-    let mean = hash_values.iter().fold(0u32, |b, &a| a as u32 + b) / hash_values.len() as u32;
+    let mean = hash_values.iter().fold(0u32, |b, &a| u32::from(a) + b) / hash_values.len() as u32;
 
-    hash_values.into_iter().map(|x| x as u32 >= mean).collect()
+    hash_values
+        .into_iter()
+        .map(|x| u32::from(x) >= mean)
+        .collect()
 }
 
 const DCT_HASH_SIZE_MULTIPLIER: u32 = 4;
@@ -362,7 +365,7 @@ fn dct_hash<I: HashImage>(img: &I, hash_size: u32, dct_2d_func: DCT2DFunc) -> Bi
     // then we only take the lowest corner of the DCT
     let hash_values: Vec<_> = prepare_image(img, large_size as u32, large_size as u32)
         .into_iter()
-        .map(|val| (val as f64) / 255.0)
+        .map(|val| f64::from(val) / 255.0)
         .collect();
 
     let dct = dct_2d_func.call(&hash_values, large_size);
@@ -387,8 +390,8 @@ impl<'a, T: 'a> Columns<'a, T> {
     #[inline(always)]
     fn from_slice(data: &'a [T], rowstride: usize) -> Self {
         Columns {
-            data: data,
-            rowstride: rowstride,
+            data,
+            rowstride,
             curr: 0,
         }
     }
@@ -402,7 +405,7 @@ impl<'a, T: 'a> Iterator for Columns<'a, T> {
             let data = &self.data[self.curr..];
             self.curr += 1;
             Some(Column {
-                data: data,
+                data,
                 rowstride: self.rowstride,
             })
         } else {

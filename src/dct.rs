@@ -21,8 +21,8 @@ impl<'a, T: 'a> ColumnsMut<'a, T> {
     #[inline(always)]
     fn from_slice(data: &'a mut [T], rowstride: usize) -> Self {
         ColumnsMut {
-            data: data,
-            rowstride: rowstride,
+            data,
+            rowstride,
             curr: 0,
         }
     }
@@ -36,7 +36,7 @@ impl<'a, T: 'a> Iterator for ColumnsMut<'a, T> {
            let data = unsafe { &mut *(&mut self.data[self.curr..] as *mut [T]) };
             self.curr += 1;
             Some(ColumnMut {
-                data: data,
+                data,
                 rowstride: self.rowstride,
             })
         } else {

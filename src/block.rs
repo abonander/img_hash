@@ -65,14 +65,17 @@ fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
     let (width, height) = img.dimensions();
     
     // Block dimensions, in pixels
-    let (block_width, block_height) = (width as f64 / size as f64, height as f64 / size as f64);
+    let (block_width, block_height) = {
+        let size = f64::from(size);
+        (f64::from(width) / size, f64::from(height) / size)
+    };
 
     let idx = |x, y| (y * size + x) as usize;
 
     img.foreach_pixel(|x, y, px| {
-        let px_sum = sum_px(px) as f64;
+        let px_sum = f64::from(sum_px(px));
 
-        let (x, y) = (x as f64, y as f64);
+        let (x, y) = (f64::from(x), f64::from(y));
 
         let block_x = x / block_width;
         let block_y = y / block_height;
@@ -138,10 +141,22 @@ fn blockhash_fast<I: HashImage>(img: &I, size: u32) -> BitVec {
 fn sum_px(px: &[u8]) -> u32 {
     // Branch prediction should eliminate the match after a few iterations
     match px.len() {
-        4 => if px[3] == 0 { 255 * 3 } else { sum_px(&px[..3]) },
-        3 => px[0] as u32 + px[1] as u32 + px[2] as u32,
-        2 => if px[1] == 0 { 255 } else { px[0] as u32 },
-        1 => px[0] as u32,
+        4 => {
+            if px[3] == 0 {
+                255 * 3
+            } else {
+                sum_px(&px[..3])
+            }
+        }
+        3 => u32::from(px[0]) + u32::from(px[1]) + u32::from(px[2]),
+        2 => {
+            if px[1] == 0 {
+                255
+            } else {
+                u32::from(px[0])
+            }
+        }
+        1 => u32::from(px[0]),
         // We can only hit this assertion if there's a bug where the number of values
         // per pixel doesn't match HashImage::channel_count
         _ => panic!("Channel count was different than actual pixel size"),
@@ -149,8 +164,9 @@ fn sum_px(px: &[u8]) -> u32 {
 }
 
 // Get the next multiple of 4 up from x, or x if x is a multiple of 4
+#[inline]
 fn next_multiple_of_4(x: u32) -> u32 {
-    x + 3 & !3
+    (x + 3) & !3
 }
 
 fn get_median<T: PartialOrd + Copy>(data: &[T]) -> T {
