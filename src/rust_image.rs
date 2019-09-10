@@ -6,15 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use image::{
-    imageops,
-    DynamicImage,
-    FilterType,
-    GrayImage,
-    GrayAlphaImage,
-    RgbImage,
-    RgbaImage,
-    GenericImageView,
-    Pixel
+    imageops, DynamicImage, FilterType, GenericImageView, GrayAlphaImage, GrayImage, Pixel,
+    RgbImage, RgbaImage,
 };
 
 use super::HashImage;
@@ -56,16 +49,16 @@ macro_rules! hash_img_impl {
     ($($ty:ident ($lumaty:ty)),+) => ( $(hash_img_impl! { $ty($lumaty) })+ );
 }
 
-hash_img_impl! { 
-    GrayImage(GrayImage), GrayAlphaImage(GrayImage), 
-    RgbImage(GrayImage), RgbaImage(GrayImage) 
+hash_img_impl! {
+    GrayImage(GrayImage), GrayAlphaImage(GrayImage),
+    RgbImage(GrayImage), RgbaImage(GrayImage)
 }
 
 impl HashImage for DynamicImage {
     type Grayscale = GrayImage;
 
     fn dimensions(&self) -> (u32, u32) {
-        <Self as GenericImageView>::dimensions(self) 
+        <Self as GenericImageView>::dimensions(self)
     }
 
     fn resize(&self, width: u32, height: u32) -> Self {
@@ -84,7 +77,10 @@ impl HashImage for DynamicImage {
         <<Self as GenericImageView>::Pixel as Pixel>::CHANNEL_COUNT
     }
 
-    fn foreach_pixel<F>(&self, mut iter_fn: F) where F: FnMut(u32, u32, &[u8]) {
+    fn foreach_pixel<F>(&self, mut iter_fn: F)
+    where
+        F: FnMut(u32, u32, &[u8]),
+    {
         for (x, y, px) in self.pixels() {
             iter_fn(x, y, px.channels());
         }

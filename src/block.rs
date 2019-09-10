@@ -20,18 +20,18 @@ const FLOAT_EQ_MARGIN: f64 = 0.001;
 
 pub fn blockhash<I: HashImage>(img: &I, size: u32) -> BitVec {
     let size = next_multiple_of_4(size);
-    let (width, height) = img.dimensions(); 
+    let (width, height) = img.dimensions();
 
     // Skip the floating point math if it's unnecessary
     if width % size == 0 && height % size == 0 {
         blockhash_fast(img, size)
     } else {
         blockhash_slow(img, size)
-    }        
-} 
+    }
+}
 
 macro_rules! gen_hash {
-    ($imgty:ty, $valty:ty, $blocks: expr, $size:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => ({
+    ($imgty:ty, $valty:ty, $blocks: expr, $size:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => {{
         let channel_count = <$imgty as HashImage>::channel_count() as u32;
 
         let group_len = (($size * $size) / 4) as usize;
@@ -41,29 +41,32 @@ macro_rules! gen_hash {
         let cmp_factor = match channel_count {
             3 | 4 => 255u32 as $valty * 3u32 as $valty,
             2 | 1 => 255u32 as $valty,
-            _ => panic!("Unrecognized channel count from HashImage: {}", channel_count),
-        }  
-            * block_area 
+            _ => panic!(
+                "Unrecognized channel count from HashImage: {}",
+                channel_count
+            ),
+        } * block_area
             / (2u32 as $valty);
 
         let medians: Vec<$valty> = $blocks.chunks(group_len).map(get_median).collect();
 
-        $blocks.chunks(group_len).zip(medians)
-            .flat_map(|(blocks, median)| 
-                blocks.iter().map(move |&block| 
-                    block > median ||
-                        ($eq_fn(block, median) && median > cmp_factor)
-                )
-            )
+        $blocks
+            .chunks(group_len)
+            .zip(medians)
+            .flat_map(|(blocks, median)| {
+                blocks.iter().map(move |&block| {
+                    block > median || ($eq_fn(block, median) && median > cmp_factor)
+                })
+            })
             .collect()
-    })
+    }};
 }
 
 fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
     let mut blocks = vec![0f64; (size * size) as usize];
 
     let (width, height) = img.dimensions();
-    
+
     // Block dimensions, in pixels
     let (block_width, block_height) = {
         let size = f64::from(size);
@@ -112,9 +115,15 @@ fn blockhash_slow<I: HashImage>(img: &I, size: u32) -> BitVec {
         blocks[idx(block_right, block_bottom)] += px_sum * weight_right * weight_bottom;
     });
 
-    
-    gen_hash!(I, f64, blocks, size, block_width, block_height,
-        |l: f64, r: f64| (l - r).abs() < FLOAT_EQ_MARGIN)
+    gen_hash!(
+        I,
+        f64,
+        blocks,
+        size,
+        block_width,
+        block_height,
+        |l: f64, r: f64| (l - r).abs() < FLOAT_EQ_MARGIN
+    )
 }
 
 fn blockhash_fast<I: HashImage>(img: &I, size: u32) -> BitVec {
@@ -125,7 +134,7 @@ fn blockhash_fast<I: HashImage>(img: &I, size: u32) -> BitVec {
 
     let idx = |x, y| (y * size + x) as usize;
 
-    img.foreach_pixel(|x, y, px| { 
+    img.foreach_pixel(|x, y, px| {
         let px_sum = sum_px(px);
 
         let block_x = x / block_width;
@@ -134,7 +143,8 @@ fn blockhash_fast<I: HashImage>(img: &I, size: u32) -> BitVec {
         blocks[idx(block_x, block_y)] += px_sum;
     });
 
-    gen_hash!(I, u32, blocks, size, block_width, block_height, |l, r| l == r)    
+    gen_hash!(I, u32, blocks, size, block_width, block_height, |l, r| l
+        == r)
 }
 
 #[inline(always)]
@@ -180,7 +190,12 @@ const SORT_THRESH: usize = 8;
 fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
     let len = data.len();
 
-    assert!(k < len, "Called qselect_inplace with k = {} and data length: {}", k, len);
+    assert!(
+        k < len,
+        "Called qselect_inplace with k = {} and data length: {}",
+        k,
+        len
+    );
 
     if len < SORT_THRESH {
         data.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Less));
@@ -213,7 +228,7 @@ fn partition<T: PartialOrd>(data: &mut [T]) -> usize {
 
     let mut curr = 0;
 
-    for i in 0 .. len - 1 {
+    for i in 0..len - 1 {
         if &data[i] < &data[len - 1] {
             data.swap(i, curr);
             curr += 1;

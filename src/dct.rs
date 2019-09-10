@@ -33,7 +33,7 @@ impl<'a, T: 'a> Iterator for ColumnsMut<'a, T> {
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.curr < self.rowstride {
-           let data = unsafe { &mut *(&mut self.data[self.curr..] as *mut [T]) };
+            let data = unsafe { &mut *(&mut self.data[self.curr..] as *mut [T]) };
             self.curr += 1;
             Some(ColumnMut {
                 data,
@@ -54,14 +54,14 @@ impl<'a, T: 'a> Index<usize> for ColumnMut<'a, T> {
     type Output = T;
     #[inline(always)]
     fn index(&self, idx: usize) -> &T {
-       &self.data[idx * self.rowstride]
+        &self.data[idx * self.rowstride]
     }
 }
 
 impl<'a, T: 'a> IndexMut<usize> for ColumnMut<'a, T> {
     #[inline(always)]
     fn index_mut(&mut self, idx: usize) -> &mut T {
-       &mut self.data[idx * self.rowstride]
+        &mut self.data[idx * self.rowstride]
     }
 }
 
@@ -108,15 +108,17 @@ pub fn clear_precomputed_matrix() {
 fn precompute_matrix(size: usize, matrix: &mut Vec<f64>) {
     matrix.resize(size * size, 0.0);
 
-    for i in 0 .. size {
-        for j in 0 .. size {
+    for i in 0..size {
+        for j in 0..size {
             matrix[i * size + j] = (PI * i as f64 * (2 * j + 1) as f64 / (2 * size) as f64).cos();
         }
     }
 }
 
 fn with_precomputed_matrix<F>(size: usize, with_fn: F) -> bool
-where F: FnOnce(&[f64]) {
+where
+    F: FnOnce(&[f64]),
+{
     PRECOMPUTED_MATRIX.with(|matrix| {
         let matrix = matrix.borrow();
 
@@ -129,35 +131,39 @@ where F: FnOnce(&[f64]) {
     })
 }
 
-pub fn dct_1d<I: Index<usize, Output=f64> + ?Sized, O: IndexMut<usize, Output=f64> + ?Sized>(input: &I, output: &mut O, len: usize) {
+pub fn dct_1d<I: Index<usize, Output = f64> + ?Sized, O: IndexMut<usize, Output = f64> + ?Sized>(
+    input: &I,
+    output: &mut O,
+    len: usize,
+) {
     if with_precomputed_matrix(len, |matrix| dct_1d_precomputed(input, output, len, matrix)) {
         return;
     }
 
-    for i in 0 .. len {        
+    for i in 0..len {
         let mut z = 0.0;
 
-        for j in 0 .. len {
-            z += input[j] * (
-                PI * i as f64 * (2 * j + 1) as f64 
-                / (2 * len) as f64
-            ).cos();
-        } 
+        for j in 0..len {
+            z += input[j] * (PI * i as f64 * (2 * j + 1) as f64 / (2 * len) as f64).cos();
+        }
 
         if i == 0 {
             z *= 1.0 / SQRT_2;
         }
 
         output[i] = z / 2.0;
-    } 
+    }
 }
 
 fn dct_1d_precomputed<I: ?Sized, O: ?Sized>(input: &I, output: &mut O, len: usize, matrix: &[f64])
-where I: Index<usize, Output=f64>, O: IndexMut<usize, Output=f64> {
-    for i in 0 .. len {
+where
+    I: Index<usize, Output = f64>,
+    O: IndexMut<usize, Output = f64>,
+{
+    for i in 0..len {
         let mut z = 0.0;
 
-        for j in 0 .. len {
+        for j in 0..len {
             z += input[j] * matrix[i * len + j];
         }
 
@@ -178,18 +184,23 @@ pub fn dct_2d(packed_2d: &[f64], rowstride: usize) -> Vec<f64> {
     assert_eq!(packed_2d.len() % rowstride, 0);
 
     let mut scratch = Vec::with_capacity(packed_2d.len() * 2);
-    unsafe { scratch.set_len(packed_2d.len() * 2); }
+    unsafe {
+        scratch.set_len(packed_2d.len() * 2);
+    }
 
     {
         let (col_pass, row_pass) = scratch.split_at_mut(packed_2d.len());
-    
-        for (row_in, row_out) in packed_2d.chunks(rowstride)
-                .zip(row_pass.chunks_mut(rowstride)) {                
+
+        for (row_in, row_out) in packed_2d
+            .chunks(rowstride)
+            .zip(row_pass.chunks_mut(rowstride))
+        {
             dct_1d(row_in, row_out, rowstride);
         }
 
         for (col_in, mut col_out) in Columns::from_slice(row_pass, rowstride)
-                .zip(ColumnsMut::from_slice(col_pass, rowstride)) {
+            .zip(ColumnsMut::from_slice(col_pass, rowstride))
+        {
             dct_1d(&col_in, &mut col_out, rowstride);
         }
     }
@@ -204,7 +215,6 @@ mod dct_simd {
     use simdty::f64x2;
 
     use std::f64::consts::{PI, SQRT_2};
-    
     macro_rules! valx2 ( ($val:expr) => ( ::simdty::f64x2($val, $val) ) );
 
     const PI: f64x2 = valx2!(PI);
@@ -223,7 +233,6 @@ mod dct_simd {
                 dct_1dx2(vals);
 
 
-        
         }
     }
 
@@ -236,7 +245,7 @@ mod dct_simd {
             for x in 0 .. vec.len() {
                 z += vec[x] * cos_approx(
                     PI * valx2!(
-                        u as f64 * (2 * x + 1) as f64 
+                        u as f64 * (2 * x + 1) as f64
                             / (2 * vec.len()) as f64
                     )
                 );
@@ -249,7 +258,7 @@ mod dct_simd {
             out.insert(u, z / valx2!(2.0));
         }
 
-        out 
+        out
     }
 
     fn cos_approx(x2: f64x2) -> f64x2 {
@@ -263,9 +272,8 @@ mod dct_simd {
         let x6 = powi(val, 6);
         let x8 = powi(val, 8);
 
-        valx2!(1.0) - (x2 / valx2!(2.0)) + (x4 / valx2!(24.0)) 
+        valx2!(1.0) - (x2 / valx2!(2.0)) + (x4 / valx2!(24.0))
             - (x6 / valx2!(720.0)) + (x8 / valx2!(40320.0))
     }
 }
 */
-
