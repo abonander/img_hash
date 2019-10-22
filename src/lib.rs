@@ -38,13 +38,13 @@ extern crate transpose;
 
 use serde::{Serialize, Deserialize};
 
-use image::{DynamicImage, GenericImageView, GrayImage, ImageBuffer, Pixel};
+use image::{GrayImage};
 use image::imageops;
 
 pub use image::FilterType;
 
 use std::borrow::Cow;
-use std::{fmt, ops};
+use std::fmt;
 use std::marker::PhantomData;
 
 mod dct;

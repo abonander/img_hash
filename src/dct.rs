@@ -7,8 +7,8 @@ pub const SIZE_MULTIPLIER: u32 = 2;
 pub const SIZE_MULTIPLIER_U: usize = SIZE_MULTIPLIER as usize;
 
 pub struct DctCtxt {
-    row_dct: Arc<Type2And3<f32>>,
-    col_dct: Arc<Type2And3<f32>>,
+    row_dct: Arc<dyn Type2And3<f32>>,
+    col_dct: Arc<dyn Type2And3<f32>>,
     width: usize,
     height: usize,
 }
