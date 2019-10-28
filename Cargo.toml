@@ -1,7 +1,7 @@
 [package]
 
 name = "img_hash"
-version = "2.1.0"
+version = "3.0.0-alpha.1"
 authors = ["Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
@@ -14,20 +14,26 @@ keywords = ["image", "hash", "perceptual", "difference"]
 
 repository = "http://github.com/abonander/img_hash"
 
+edition = "2015"
+
+readme = "README.md"
+
 [features]
-default = ["rust-image"]
-rust-image = ["image"]
-bench = []
+nightly = []
 
 [dependencies]
-bit-vec = "0.4"
-rustc-serialize = "0.3"
+base64 = "0.10"
+image = ">=0.21,<0.23"
+rustdct = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+transpose = "0.1"
 
 [dev-dependencies]
-rand = "0.3"
-image = ">=0.10, <=0.19"
+criterion = "0.2"
 
-[dependencies.image]
-version = ">=0.10, <=0.19"
-optional = true
+[[bench]]
+name = "byte_to_float"
+harness = false
 
+[[bin]]
+name = "hash_image"

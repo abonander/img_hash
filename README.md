@@ -22,34 +22,30 @@ Usage
 Add `img_hash` to your `Cargo.toml`:
 
     [dependencies.img_hash]
-    version = "2.0"
-    # For interop with `image`:
-    features = ["rust-image"]
+    version = "3.0"
     
 Example program:
 
 ```rust
-extern crate image;
-extern crate img_hash;
+ extern crate image;
+ extern crate img_hash;
+ 
+ use img_hash::{HasherConfig, HashAlg};
 
-use std::path::Path;
-use img_hash::{ImageHash, HashType};
+ fn main() {
+     let image1 = image::open("image1.png").unwrap();
+     let image2 = image::open("image2.png").unwrap();
+     
+     let hasher = HasherConfig::new().to_hasher();
 
-fn main() {
-    let image1 = image::open(&Path::new("image1.png")).unwrap();
-    let image2 = image::open(&Path::new("image2.png")).unwrap();
-    
-    // These two lines produce hashes with 64 bits (8 ** 2),
-    // using the Gradient hash, a good middle ground between 
-    // the performance of Mean and the accuracy of DCT.
-    let hash1 = ImageHash::hash(&image1, 8, HashType::Gradient);
-    let hash2 = ImageHash::hash(&image2, 8, HashType::Gradient);
-    
-    println!("Image1 hash: {}", hash1.to_base64());
-    println!("Image2 hash: {}", hash2.to_base64());
-    
-    println!("% Difference: {}", hash1.dist_ratio(&hash2));
-}
+     let hash1 = hasher.hash_image(&image1);
+     let hash2 = hasher.hash_image(&image2);
+     
+     println!("Image1 hash: {}", hash1.to_base64());
+     println!("Image2 hash: {}", hash2.to_base64());
+     
+     println!("Hamming Distance: {}", hash1.dist(&hash2));
+ }
 ```
    
 Benchmarking

@@ -1,19 +1,14 @@
 language: rust
-
+cache: cargo
+rust:
+  - stable
+  - nightly
 os:
 - linux
 - osx
-env:
-  global:
-    - secure: fRJ9UyMJ106TrwUFps7b+DRNehJdazKgfc5AqATeNvifn/arlJrr8oyWWv1/ewwy0JtEP0rU3s+aJKp2AM9zu4F9VnjeSIgq8BkRxwK5EKa6jD2+Jo5w++wBFVjqeyvzkDnt4TdUnEil5kWqV1En1uomyZiZ9hiXHcyXfy6Zddk=
-before_script:
-- rustc -V
-- cargo -V
+
 script:
-- cargo build -v
-- cargo test -v
-- cargo doc -v
-after_success:
-- cp -R target/doc doc
-- curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
-- rm -r doc
+  - cargo build -v
+  - cargo test -v
+  - if [ ${TRAVIS_RUST_VERSION} = "nightly" ]; then cargo test --features "nightly"; fi
+  - cargo doc -v
