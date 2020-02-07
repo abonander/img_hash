@@ -41,7 +41,7 @@ use serde::{Serialize, Deserialize};
 use image::{GrayImage};
 use image::imageops;
 
-pub use image::FilterType;
+pub use image::imageops::FilterType;
 
 use std::borrow::Cow;
 use std::fmt;
