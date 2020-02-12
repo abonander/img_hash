@@ -22,14 +22,14 @@ readme = "README.md"
 nightly = []
 
 [dependencies]
-base64 = "0.10"
+base64 = ">=0.10,<0.12"
 image = ">=0.21,<0.24"
-rustdct = "0.3"
+rustdct = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-transpose = "0.1"
+transpose = "0.2"
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3"
 
 [[bench]]
 name = "byte_to_float"
