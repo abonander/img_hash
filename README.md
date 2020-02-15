@@ -10,7 +10,7 @@ http://www.hackerfactor.com/blog/?/archives/432-Looks-Like-It.html (Accessed Aug
 
 Also provides an implementation of [the Blockhash.io algorithm](http://blockhash.io).
 
-With the `rust-image` feature, this crate can operate directly on buffers from the [PistonDevelopers/image][1] crate.
+This crate can operate directly on buffers from the [PistonDevelopers/image][1] crate.
 
 [1]: https://github.com/PistonDevelopers/image 
 
