@@ -113,7 +113,7 @@ pub(crate) use traits::BitSet;
 /// # use img_hash::*;
 ///
 /// // Use default container type, good for any hash size
-/// let hasher = HasherConfig::new();
+/// let config = HasherConfig::new();
 ///
 /// /// Inline hash container that exactly fits the default hash size
 /// let config = HasherConfig::with_bytes_type::<[u8; 8]>();
