@@ -40,7 +40,7 @@ fn bench_functions(c: &mut Criterion) {
                 |mut out| out.extend(vals.iter().map(|&x| x as f32 / 255.))
             );
         }
-    ).throughput(|&&size| Throughput::Bytes(size as u32));
+    ).throughput(|&&size| Throughput::Bytes(size as _));
 
     c.bench("byte to float conversion", bench);
 }
