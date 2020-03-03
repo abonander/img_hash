@@ -127,7 +127,7 @@ fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         let px_sum = sum_px(px);
 
         let block_x = x / block_width;
-        let block_y = y / block_width;
+        let block_y = y / block_height;
 
         add_to_block(block_x, block_y, px_sum);
     });
