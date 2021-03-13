@@ -17,7 +17,7 @@ fn main() -> Result<(), String> {
 
     let hash = HasherConfig::new().hash_size(8, 8).to_hasher().hash_image(&image);
 
-    let hash_str = hash.as_bytes().iter().map(|b| format!("{:X}", b)).collect::<String>();
+    let hash_str = hash.as_bytes().iter().map(|b| format!("{:02x}", b)).collect::<String>();
 
     println!("{}: {}", &args[1], hash_str);
 
