@@ -23,7 +23,7 @@ nightly = []
 
 [dependencies]
 base64 = ">=0.10,<0.12"
-image = ">=0.21,<0.24"
+image = { version = ">=0.21,<0.24", default-features = false }
 rustdct = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.2"
