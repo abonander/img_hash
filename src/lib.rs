@@ -404,9 +404,41 @@ pub struct ImageHash<B = Box<[u8]>> {
     __backcompat: (),
 }
 
+/// Error that can happen constructing a `ImageHash` from bytes.
+#[derive(Debug, PartialEq)]
+pub enum InvalidBytesError {
+    /// Byte slice passed to `from_bytes` was the wrong length.
+    BytesWrongLength {
+        /// Number of bytes the `ImageHash` type expected.
+        expected: usize,
+        /// Number of bytes found when parsing the hash bytes.
+        found: usize,
+    },
+    /// String passed was not valid base64.
+    Base64(base64::DecodeError)
+}
+
 impl<B: HashBytes> ImageHash<B> {
     /// Get the bytes of this hash.
     pub fn as_bytes(&self) -> &[u8] { self.hash.as_slice() }
+
+    /// Create an `ImageHash` instance from the given bytes.
+    ///
+    /// ## Errors:
+    /// Returns a `InvalidBytesError::BytesWrongLength` error if the slice passed can't fit in `B`.
+    pub fn from_bytes(bytes: &[u8]) -> Result<ImageHash<B>, InvalidBytesError> {
+        if bytes.len() * 8 > B::max_bits() {
+            return Err(InvalidBytesError::BytesWrongLength {
+                expected: B::max_bits() / 8,
+                found: bytes.len(),
+            });
+        }
+
+        Ok(ImageHash {
+            hash: B::from_iter(bytes.iter().copied()),
+            __backcompat: (),
+        })
+    }
 
     /// Calculate the Hamming distance between this and `other`.
     ///
@@ -424,18 +456,12 @@ impl<B: HashBytes> ImageHash<B> {
     /// Create an `ImageHash` instance from the given Base64-encoded string.
     ///
     /// ## Errors:
-    /// Returns `DecodeError::InvalidLength` if the decoded bytes can't fit in `B`.
-    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, base64::DecodeError>{
-        let bytes = base64::decode(encoded_hash)?;
+    /// Returns `InvaidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64`.
+    /// Otherwise returns the same errors as `from_bytes`.
+    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError>{
+        let bytes = base64::decode(encoded_hash).map_err(InvalidBytesError::Base64)?;
 
-        if bytes.len() * 8 > B::max_bits() {
-            return Err(base64::DecodeError::InvalidLength)
-        }
-
-        Ok(ImageHash {
-            hash: B::from_iter(bytes.into_iter()),
-            __backcompat: (),
-        })
+        Self::from_bytes(&bytes)
     }
 
     /// Get a Base64 string representing the bits of this hash.
