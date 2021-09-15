@@ -1,8 +1,6 @@
 img_hash [![Build Status](https://travis-ci.org/abonander/img_hash.svg?branch=master)](https://travis-ci.org/abonander/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
 ========
 
-##### Now builds on stable Rust! (But needs nightly to bench.)
-
 A library for getting perceptual hash values of images.
 
 Thanks to Dr. Neal Krawetz for the outlines of the Mean (aHash), Gradient (dHash), and DCT (pHash) perceptual hash algorithms:  
