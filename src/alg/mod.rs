@@ -1,10 +1,13 @@
 mod blockhash;
 
-use {BitSet, HashCtxt, Image};
+use serde::{Deserialize, Serialize};
 
-use self::HashAlg::*;
-use HashVals::*;
-use CowImage::*;
+use crate::{
+    traits::{BitSet, Image},
+    CowImage::*,
+    HashCtxt,
+    HashVals::*,
+};
 
 /// Hash algorithms implemented by this crate.
 ///
@@ -17,6 +20,7 @@ use CowImage::*;
 /// ### Choosing an Algorithm
 /// Each algorithm has different performance characteristics
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum HashAlg {
     /// The Mean hashing algorithm.
     ///
@@ -72,25 +76,27 @@ pub enum HashAlg {
     /// The algorithm is described in a high level here:
     /// https://github.com/commonsmachinery/blockhash-rfc/blob/master/main.md
     Blockhash,
-
-    /// EXHAUSTIVE MATCHING IS NOT RECOMMENDED FOR BACKWARDS COMPATIBILITY REASONS
-    /// New variants may be added in minor (x.[y + 1].z) releases
-    #[doc(hidden)]
-    #[serde(skip)]
-    __Nonexhaustive,
 }
 
-fn next_multiple_of_2(x: u32) -> u32 { x + 1 & !1 }
-fn next_multiple_of_4(x: u32) -> u32 { x + 3 & !3 }
+fn next_multiple_of_2(x: u32) -> u32 {
+    (x + 1) & !1
+}
+
+fn next_multiple_of_4(x: u32) -> u32 {
+    (x + 3) & !3
+}
 
 impl HashAlg {
-    pub (crate) fn hash_image<I, B>(&self, ctxt: &HashCtxt, image: &I) -> B
-    where I: Image, B: BitSet {
+    pub(crate) fn hash_image<I, B>(&self, ctxt: &HashCtxt, image: &I) -> B
+    where
+        I: Image,
+        B: BitSet,
+    {
         let post_gauss = ctxt.gauss_preproc(image);
 
         let HashCtxt { width, height, .. } = *ctxt;
 
-        if *self == Blockhash {
+        if *self == HashAlg::Blockhash {
             return match post_gauss {
                 Borrowed(img) => blockhash::blockhash(img, width, height),
                 Owned(img) => blockhash::blockhash(&img, width, height),
@@ -105,66 +111,86 @@ impl HashAlg {
         let rowstride = resize_width as usize;
 
         match (*self, hash_vals) {
-            (Mean, Floats(ref floats)) => B::from_bools(mean_hash_f32(floats)),
-            (Mean, Bytes(ref bytes)) => B::from_bools(mean_hash_u8(bytes)),
-            (Gradient, Floats(ref floats)) => B::from_bools(gradient_hash(floats, rowstride)),
-            (Gradient, Bytes(ref bytes)) => B::from_bools(gradient_hash(bytes, rowstride)),
-            (VertGradient, Floats(ref floats)) => B::from_bools(vert_gradient_hash(floats,
-                                                                                   rowstride)),
-            (VertGradient, Bytes(ref bytes)) => B::from_bools(vert_gradient_hash(bytes, rowstride)),
-            (DoubleGradient, Floats(ref floats)) => B::from_bools(double_gradient_hash(floats,
-                                                                                       rowstride)),
-            (DoubleGradient, Bytes(ref bytes)) => B::from_bools(double_gradient_hash(bytes,
-                                                                                     rowstride)),
-            (Blockhash, _) | (__Nonexhaustive, _) => unreachable!(),
+            (HashAlg::Mean, Floats(ref floats)) => B::from_bools(mean_hash_f32(floats)),
+            (HashAlg::Mean, Bytes(ref bytes)) => B::from_bools(mean_hash_u8(bytes)),
+            (HashAlg::Gradient, Floats(ref floats)) => {
+                B::from_bools(gradient_hash(floats, rowstride))
+            }
+            (HashAlg::Gradient, Bytes(ref bytes)) => B::from_bools(gradient_hash(bytes, rowstride)),
+            (HashAlg::VertGradient, Floats(ref floats)) => {
+                B::from_bools(vert_gradient_hash(floats, rowstride))
+            }
+            (HashAlg::VertGradient, Bytes(ref bytes)) => {
+                B::from_bools(vert_gradient_hash(bytes, rowstride))
+            }
+            (HashAlg::DoubleGradient, Floats(ref floats)) => {
+                B::from_bools(double_gradient_hash(floats, rowstride))
+            }
+            (HashAlg::DoubleGradient, Bytes(ref bytes)) => {
+                B::from_bools(double_gradient_hash(bytes, rowstride))
+            }
+            (HashAlg::Blockhash, _) => unreachable!(),
         }
     }
 
-    pub (crate) fn round_hash_size(&self, width: u32, height: u32) -> (u32, u32) {
-        match *self {
-            DoubleGradient => (next_multiple_of_2(width), next_multiple_of_2(height)),
-            Blockhash => (next_multiple_of_4(width), next_multiple_of_4(height)),
+    pub(crate) fn round_hash_size(&self, width: u32, height: u32) -> (u32, u32) {
+        match self {
+            HashAlg::DoubleGradient => (next_multiple_of_2(width), next_multiple_of_2(height)),
+            HashAlg::Blockhash => (next_multiple_of_4(width), next_multiple_of_4(height)),
             _ => (width, height),
         }
     }
 
-    pub (crate) fn resize_dimensions(&self, width: u32, height: u32) -> (u32, u32) {
-        match *self {
-            Mean => (width, height),
-            Blockhash => panic!("Blockhash algorithm does not resize"),
-            Gradient => (width + 1, height),
-            VertGradient => (width, height + 1),
-            DoubleGradient => (width / 2 + 1, height / 2 + 1),
-            __Nonexhaustive => panic!("not a real hash algorithm"),
+    pub(crate) fn resize_dimensions(&self, width: u32, height: u32) -> (u32, u32) {
+        match self {
+            HashAlg::Mean => (width, height),
+            HashAlg::Blockhash => panic!("Blockhash algorithm does not resize"),
+            HashAlg::Gradient => (width + 1, height),
+            HashAlg::VertGradient => (width, height + 1),
+            HashAlg::DoubleGradient => (width / 2 + 1, height / 2 + 1),
         }
     }
 }
 
-fn mean_hash_u8<'a>(luma: &'a [u8]) -> impl Iterator<Item = bool> + 'a {
+fn mean_hash_u8(luma: &[u8]) -> impl Iterator<Item = bool> + '_ {
     let mean = (luma.iter().map(|&l| l as u32).sum::<u32>() / luma.len() as u32) as u8;
     luma.iter().map(move |&x| x >= mean)
 }
 
-fn mean_hash_f32<'a>(luma: &'a [f32]) -> impl Iterator<Item = bool> + 'a {
+fn mean_hash_f32(luma: &[f32]) -> impl Iterator<Item = bool> + '_ {
     let mean = luma.iter().sum::<f32>() / luma.len() as f32;
     luma.iter().map(move |&x| x >= mean)
 }
 
 /// The guts of the gradient hash separated so we can reuse them
 fn gradient_hash_impl<I>(luma: I) -> impl Iterator<Item = bool>
-    where I: IntoIterator + Clone, <I as IntoIterator>::Item: PartialOrd {
-    luma.clone().into_iter().skip(1).zip(luma).map(|(this, last)| last < this)
+where
+    I: IntoIterator + Clone,
+    <I as IntoIterator>::Item: PartialOrd,
+{
+    luma.clone()
+        .into_iter()
+        .skip(1)
+        .zip(luma)
+        .map(|(this, last)| last < this)
 }
 
-fn gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+fn gradient_hash<T: PartialOrd>(luma: &[T], rowstride: usize) -> impl Iterator<Item = bool> + '_ {
     luma.chunks(rowstride).flat_map(gradient_hash_impl)
 }
 
-fn vert_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
-    (0 .. rowstride).map(move |col_start| luma[col_start..].iter().step_by(rowstride))
+fn vert_gradient_hash<T: PartialOrd>(
+    luma: &[T],
+    rowstride: usize,
+) -> impl Iterator<Item = bool> + '_ {
+    (0..rowstride)
+        .map(move |col_start| luma[col_start..].iter().step_by(rowstride))
         .flat_map(gradient_hash_impl)
 }
 
-fn double_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+fn double_gradient_hash<T: PartialOrd>(
+    luma: &[T],
+    rowstride: usize,
+) -> impl Iterator<Item = bool> + '_ {
     gradient_hash(luma, rowstride).chain(vert_gradient_hash(luma, rowstride))
 }

@@ -1,13 +1,12 @@
 // Implementation adapted from Python version:
 // https://github.com/commonsmachinery/blockhash-python/blob/e8b009d/blockhash.py
 // Main site: http://blockhash.io
+
+use std::{cmp::Ordering, mem, ops::AddAssign};
+
 use image::{GenericImageView, Pixel};
 
-use {BitSet, Image, HashBytes};
-
-use std::cmp::Ordering;
-use std::ops::AddAssign;
-use std::mem;
+use crate::traits::{BitSet, HashBytes, Image};
 
 const FLOAT_EQ_MARGIN: f32 = 0.001;
 
@@ -22,11 +21,11 @@ pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B 
         blockhash_fast(img, width, height)
     } else {
         blockhash_slow(img, width, height)
-    }        
-} 
+    }
+}
 
 macro_rules! gen_hash {
-    ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => ({
+    ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => {{
         #[allow(deprecated)] // deprecated as of 0.22
         let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::channel_count() as u32;
 
@@ -38,25 +37,28 @@ macro_rules! gen_hash {
             3 | 4 => 255u32 as $valty * 3u32 as $valty,
             2 | 1 => 255u32 as $valty,
             _ => panic!("Unrecognized channel count from Image: {}", channel_count),
-        }  
-            * block_area 
+        } * block_area
             / (2u32 as $valty);
 
         let medians: Vec<$valty> = $blocks.chunks(group_len).map(get_median).collect();
 
         BitSet::from_bools(
-            $blocks.chunks(group_len).zip(medians)
-            .flat_map(|(blocks, median)| 
-                blocks.iter().map(move |&block| 
-                    block > median ||
-                        ($eq_fn(block, median) && median > cmp_factor)
-                )
-            )
+            $blocks
+                .chunks(group_len)
+                .zip(medians)
+                .flat_map(|(blocks, median)| {
+                    blocks.iter().map(move |&block| {
+                        block > median || ($eq_fn(block, median) && median > cmp_factor)
+                    })
+                }),
         )
-    })
+    }};
 }
 
-fn block_adder<'a, T: AddAssign + 'a>(blocks: &'a mut [T], width: u32) -> impl FnMut(u32, u32, T) + 'a {
+fn block_adder<'a, T: AddAssign + 'a>(
+    blocks: &'a mut [T],
+    width: u32,
+) -> impl FnMut(u32, u32, T) + 'a {
     move |x, y, add| (blocks[(y as usize) * (width as usize) + (x as usize)] += add)
 }
 
@@ -64,9 +66,12 @@ fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
     let mut blocks = vec![0f32; (hwidth * hheight) as usize];
 
     let (iwidth, iheight) = img.dimensions();
-    
+
     // Block dimensions, in pixels
-    let (block_width, block_height) = (iwidth as f32 / hwidth as f32, iheight as f32 / hheight as f32);
+    let (block_width, block_height) = (
+        iwidth as f32 / hwidth as f32,
+        iheight as f32 / hheight as f32,
+    );
 
     img.foreach_pixel8(|x, y, px| {
         let mut add_to_block = block_adder(&mut blocks, hwidth);
@@ -105,14 +110,28 @@ fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         };
 
         add_to_block(block_left, block_top, px_sum * weight_left * weight_top);
-        add_to_block(block_left, block_bottom, px_sum * weight_left * weight_bottom);
+        add_to_block(
+            block_left,
+            block_bottom,
+            px_sum * weight_left * weight_bottom,
+        );
         add_to_block(block_right, block_top, px_sum * weight_right * weight_top);
-        add_to_block(block_right, block_bottom, px_sum * weight_right * weight_bottom);
+        add_to_block(
+            block_right,
+            block_bottom,
+            px_sum * weight_right * weight_bottom,
+        );
     });
 
-    
-    gen_hash!(I, f32, blocks, hwidth, block_width, block_height,
-        |l: f32, r: f32| (l - r).abs() < FLOAT_EQ_MARGIN)
+    gen_hash!(
+        I,
+        f32,
+        blocks,
+        hwidth,
+        block_width,
+        block_height,
+        |l: f32, r: f32| (l - r).abs() < FLOAT_EQ_MARGIN
+    )
 }
 
 fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) -> B {
@@ -132,16 +151,29 @@ fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         add_to_block(block_x, block_y, px_sum);
     });
 
-    gen_hash!(I, u32, blocks, hwidth, block_width, block_height, |l, r| l == r)
+    gen_hash!(I, u32, blocks, hwidth, block_width, block_height, |l, r| l
+        == r)
 }
 
 #[inline(always)]
 fn sum_px(chans: &[u8]) -> u32 {
     // Branch prediction should eliminate the match after a few iterations
     match chans.len() {
-        4 => if chans[3] == 0 { 255 * 3 } else { sum_px(&chans[..3]) },
+        4 => {
+            if chans[3] == 0 {
+                255 * 3
+            } else {
+                sum_px(&chans[..3])
+            }
+        }
         3 => chans.iter().map(|&x| x as u32).sum(),
-        2 => if chans[1] == 0 { 255 } else { chans[0] as u32 },
+        2 => {
+            if chans[1] == 0 {
+                255
+            } else {
+                chans[0] as u32
+            }
+        }
         1 => chans[0] as u32,
         channels => panic!("Unsupported channel count in image: {}", channels),
     }
@@ -158,7 +190,12 @@ const SORT_THRESH: usize = 8;
 fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
     let len = data.len();
 
-    assert!(k < len, "Called qselect_inplace with k = {} and data length: {}", k, len);
+    assert!(
+        k < len,
+        "Called qselect_inplace with k = {} and data length: {}",
+        k,
+        len
+    );
 
     if len < SORT_THRESH {
         data.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Less));
@@ -166,13 +203,10 @@ fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
     }
 
     let pivot_idx = partition(data);
-
-    if k == pivot_idx {
-        &mut data[pivot_idx]
-    } else if k < pivot_idx {
-        qselect_inplace(&mut data[..pivot_idx], k)
-    } else {
-        qselect_inplace(&mut data[pivot_idx + 1..], k - pivot_idx - 1)
+    match k.cmp(&pivot_idx) {
+        Ordering::Less => qselect_inplace(&mut data[..pivot_idx], k),
+        Ordering::Equal => &mut data[pivot_idx],
+        Ordering::Greater => qselect_inplace(&mut data[pivot_idx + 1..], k - pivot_idx - 1),
     }
 }
 
@@ -191,8 +225,8 @@ fn partition<T: PartialOrd>(data: &mut [T]) -> usize {
 
     let mut curr = 0;
 
-    for i in 0 .. len - 1 {
-        if &data[i] < &data[len - 1] {
+    for i in 0..len - 1 {
+        if data[i] < data[len - 1] {
             data.swap(i, curr);
             curr += 1;
         }
