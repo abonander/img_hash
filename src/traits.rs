@@ -5,11 +5,7 @@ use std::ops;
 
 /// Interface for types used for storing hash data.
 ///
-/// This is implemented for `Vec<u8>`, `Box<[u8]>` and arrays that are multiples/combinations of
-/// useful x86 bytewise SIMD register widths (64, 128, 256, 512 bits).
-///
-/// Please feel free to open a pull request [on Github](https://github.com/abonander/img_hash)
-/// if you need this implemented for a different array size.
+/// This is implemented for `Vec<u8>`, `Box<[u8]>` and arrays of any size.
 pub trait HashBytes {
     /// Construct this type from an iterator of bytes.
     ///
@@ -53,30 +49,23 @@ impl HashBytes for Vec<u8> {
     fn as_slice(&self) -> &[u8] { self }
 }
 
-macro_rules! hash_bytes_array {
-    ($($n:expr),*) => {$(
-        impl HashBytes for [u8; $n] {
-            fn from_iter<I: Iterator<Item=u8>>(mut iter: I) -> Self {
-                // optimizer should eliminate this zeroing
-                let mut out = [0; $n];
+impl<const N: usize> HashBytes for [u8; N] {
+    fn from_iter<I: Iterator<Item = u8>>(mut iter: I) -> Self {
+        let mut out = [0; N];
 
-                for (src, dest) in iter.by_ref().zip(out.as_mut()) {
-                    *dest = src;
-                }
-
-                out
-            }
-
-            fn max_bits() -> usize {
-                $n * 8
-            }
-
-            fn as_slice(&self) -> &[u8] { self }
+        for (src, dest) in iter.by_ref().zip(out.as_mut()) {
+            *dest = src;
         }
-    )*}
-}
 
-hash_bytes_array!(8, 16, 24, 32, 40, 48, 56, 64);
+        out
+    }
+
+    fn max_bits() -> usize {
+        N * 8
+    }
+
+    fn as_slice(&self) -> &[u8] { self }
+}
 
 struct BoolsToBytes<I> {
     iter: I,
