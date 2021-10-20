@@ -2,22 +2,19 @@
 //! Supports images opened with the [image] crate from Piston.
 //!
 //! ```rust,no_run
-//! use img_hash::{HasherConfig, HashAlg};
+//! # use img_hash::{HasherConfig, HashAlg};
+//! let image1 = image::open("image1.png").unwrap();
+//! let image2 = image::open("image2.png").unwrap();
+//!     
+//! let hasher = HasherConfig::new().to_hasher();
 //!
-//! fn main() {
-//!     let image1 = image::open("image1.png").unwrap();
-//!     let image2 = image::open("image2.png").unwrap();
+//! let hash1 = hasher.hash_image(&image1);
+//! let hash2 = hasher.hash_image(&image2);
 //!     
-//!     let hasher = HasherConfig::new().to_hasher();
-//!
-//!     let hash1 = hasher.hash_image(&image1);
-//!     let hash2 = hasher.hash_image(&image2);
+//! println!("Image1 hash: {}", hash1.to_base64());
+//! println!("Image2 hash: {}", hash2.to_base64());
 //!     
-//!     println!("Image1 hash: {}", hash1.to_base64());
-//!     println!("Image2 hash: {}", hash2.to_base64());
-//!     
-//!     println!("Hamming Distance: {}", hash1.dist(&hash2));
-//! }
+//! println!("Hamming Distance: {}", hash1.dist(&hash2));
 //! ```
 //! [image]: https://github.com/PistonDevelopers/image
 #![deny(missing_docs)]
