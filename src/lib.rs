@@ -19,6 +19,7 @@
 //! [image]: https://github.com/PistonDevelopers/image
 #![deny(missing_docs)]
 
+use std::fmt::Display;
 use std::{borrow::Cow, fmt, marker::PhantomData};
 
 mod alg;
@@ -405,6 +406,24 @@ impl HashCtxt {
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct ImageHash<B = Box<[u8]>> {
     hash: B,
+}
+
+impl<B: AsRef<[u8]>> ImageHash<B> {
+    /// Format this image has as a hex string.
+    pub fn to_hex(&self) -> String {
+        static CHARS: &[u8] = b"0123456789abcdef";
+        
+        let bytes = self.hash.as_ref();
+        let mut v = Vec::with_capacity(bytes.len() * 2);
+        for &byte in bytes {
+            v.push(CHARS[(byte >> 4) as usize]);
+            v.push(CHARS[(byte & 0xf) as usize]);
+        }
+
+        unsafe {
+            String::from_utf8_unchecked(v)
+        }
+    }
 }
 
 /// Error that can happen constructing a `ImageHash` from bytes.
