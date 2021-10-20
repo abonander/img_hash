@@ -19,7 +19,6 @@
 //! [image]: https://github.com/PistonDevelopers/image
 #![deny(missing_docs)]
 
-use std::fmt::Display;
 use std::{borrow::Cow, fmt, marker::PhantomData};
 
 mod alg;
