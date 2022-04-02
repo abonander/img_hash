@@ -167,13 +167,10 @@ fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
     }
 
     let pivot_idx = partition(data);
-
-    if k == pivot_idx {
-        &mut data[pivot_idx]
-    } else if k < pivot_idx {
-        qselect_inplace(&mut data[..pivot_idx], k)
-    } else {
-        qselect_inplace(&mut data[pivot_idx + 1..], k - pivot_idx - 1)
+    match k.cmp(&pivot_idx) {
+        Ordering::Less => qselect_inplace(&mut data[..pivot_idx], k),
+        Ordering::Equal => &mut data[pivot_idx],
+        Ordering::Greater => qselect_inplace(&mut data[pivot_idx + 1..], k - pivot_idx - 1),
     }
 }
 
@@ -193,7 +190,7 @@ fn partition<T: PartialOrd>(data: &mut [T]) -> usize {
     let mut curr = 0;
 
     for i in 0 .. len - 1 {
-        if &data[i] < &data[len - 1] {
+        if data[i] < data[len - 1] {
             data.swap(i, curr);
             curr += 1;
         }

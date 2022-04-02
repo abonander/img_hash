@@ -35,7 +35,7 @@ impl HashBytes for Box<[u8]> {
     }
 
     fn max_bits() -> usize {
-        usize::max_value()
+        usize::MAX
     }
 
     fn as_slice(&self) -> &[u8] { self }
@@ -47,7 +47,7 @@ impl HashBytes for Vec<u8> {
     }
 
     fn max_bits() -> usize {
-        usize::max_value()
+        usize::MAX
     }
 
     fn as_slice(&self) -> &[u8] { self }

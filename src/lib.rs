@@ -150,6 +150,12 @@ impl HasherConfig<Box<[u8]>> {
     }
 }
 
+impl Default for HasherConfig<Box<[u8]>> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<B: HashBytes> HasherConfig<B> {
     /// Set a new hash width and height; these can be the same.
     ///
@@ -325,7 +331,7 @@ enum CowImage<'a, I: Image> {
 impl<'a, I: Image> CowImage<'a, I> {
     fn to_grayscale(&self) -> Cow<GrayImage> {
         match *self {
-            CowImage::Borrowed(ref img) => img.to_grayscale(),
+            CowImage::Borrowed( img) => img.to_grayscale(),
             CowImage::Owned(ref img) => img.to_grayscale(),
         }
     }

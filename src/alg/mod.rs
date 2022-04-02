@@ -71,12 +71,6 @@ pub enum HashAlg {
     /// The algorithm is described in a high level here:
     /// https://github.com/commonsmachinery/blockhash-rfc/blob/master/main.md
     Blockhash,
-
-    /// EXHAUSTIVE MATCHING IS NOT RECOMMENDED FOR BACKWARDS COMPATIBILITY REASONS
-    /// New variants may be added in minor (x.[y + 1].z) releases
-    #[doc(hidden)]
-    #[serde(skip)]
-    __Nonexhaustive,
 }
 
 fn next_multiple_of_2(x: u32) -> u32 { x + 1 & !1 }
@@ -115,7 +109,7 @@ impl HashAlg {
                                                                                        rowstride)),
             (DoubleGradient, Bytes(ref bytes)) => B::from_bools(double_gradient_hash(bytes,
                                                                                      rowstride)),
-            (Blockhash, _) | (__Nonexhaustive, _) => unreachable!(),
+            (Blockhash, _) => unreachable!(),
         }
     }
 
@@ -134,7 +128,6 @@ impl HashAlg {
             Gradient => (width + 1, height),
             VertGradient => (width, height + 1),
             DoubleGradient => (width / 2 + 1, height / 2 + 1),
-            __Nonexhaustive => panic!("not a real hash algorithm"),
         }
     }
 }
