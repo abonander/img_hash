@@ -1,10 +1,9 @@
 mod blockhash;
 
-use {BitSet, HashCtxt, Image};
-
 use self::HashAlg::*;
-use HashVals::*;
-use CowImage::*;
+use crate::{BitSet, HashCtxt, Image};
+use crate::HashVals::*;
+use crate::CowImage::*;
 
 /// Hash algorithms implemented by this crate.
 ///

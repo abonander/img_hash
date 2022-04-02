@@ -3,11 +3,12 @@
 // Main site: http://blockhash.io
 use image::{GenericImageView, Pixel};
 
-use {BitSet, Image, HashBytes};
 
 use std::cmp::Ordering;
 use std::ops::AddAssign;
 use std::mem;
+use crate::{HashBytes, Image};
+use crate::BitSet;
 
 const FLOAT_EQ_MARGIN: f32 = 0.001;
 
@@ -28,7 +29,7 @@ pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B 
 macro_rules! gen_hash {
     ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => ({
         #[allow(deprecated)] // deprecated as of 0.22
-        let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::channel_count() as u32;
+        let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::CHANNEL_COUNT as u32;
 
         let group_len = ($width * 4) as usize;
 

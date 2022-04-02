@@ -1,20 +1,20 @@
 [package]
 
-name = "img_hash"
-version = "3.2.0"
-authors = ["Austin Bonander <austin.bonander@gmail.com>"]
+name = "image_hasher"
+version = "1.0.0"
+authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>","Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
 
 license = "MIT OR Apache-2.0"
 
-documentation = "http://docs.rs/img_hash"
+documentation = "http://docs.rs/imgage_hasher"
 
 keywords = ["image", "hash", "perceptual", "difference"]
 
-repository = "http://github.com/abonander/img_hash"
+repository = "http://github.com/qarmin/img_hash"
 
-edition = "2015"
+edition = "2021"
 
 readme = "README.md"
 
@@ -22,9 +22,9 @@ readme = "README.md"
 nightly = []
 
 [dependencies]
-base64 = ">=0.10,<0.14"
-image = { version = ">=0.21,<0.24", default-features = false }
-rustdct = "0.4"
+base64 = "0.20.0-alpha.1"
+image = { version = ">=0.24,<0.25", default-features = false }
+rustdct = "0.5.1" # TODO, versions >=0.6 have breaking change
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.2"
 

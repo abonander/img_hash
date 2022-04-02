@@ -1,9 +1,7 @@
 //! Hash an image and print the Base64 value
 
-extern crate img_hash;
-extern crate image;
 
-use img_hash::HasherConfig;
+use image_hasher::HasherConfig;
 
 use std::env;
 

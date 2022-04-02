@@ -2,39 +2,29 @@
 //! Supports images opened with the [image] crate from Piston.
 //!
 //! ```rust,no_run
-//! extern crate image;
-//! extern crate img_hash;
-//! 
-//! use img_hash::{HasherConfig, HashAlg};
 //!
-//! fn main() {
-//!     let image1 = image::open("image1.png").unwrap();
-//!     let image2 = image::open("image2.png").unwrap();
-//!     
-//!     let hasher = HasherConfig::new().to_hasher();
+//! use image_hasher::{HasherConfig, HashAlg};
 //!
-//!     let hash1 = hasher.hash_image(&image1);
-//!     let hash2 = hasher.hash_image(&image2);
+//! let image1 = image::open("image1.png").unwrap();
+//! let image2 = image::open("image2.png").unwrap();
+//!
+//! let hasher = HasherConfig::new().to_hasher();
+//!
+//! let hash1 = hasher.hash_image(&image1);
+//! let hash2 = hasher.hash_image(&image2);
 //!     
-//!     println!("Image1 hash: {}", hash1.to_base64());
-//!     println!("Image2 hash: {}", hash2.to_base64());
-//!     
-//!     println!("Hamming Distance: {}", hash1.dist(&hash2));
-//! }
+//! println!("Image1 hash: {}", hash1.to_base64());
+//! println!("Image2 hash: {}", hash2.to_base64());
+//!
+//! println!("Hamming Distance: {}", hash1.dist(&hash2));
 //! ```
 //! [image]: https://github.com/PistonDevelopers/image
 #![deny(missing_docs)]
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-extern crate base64;
 
 #[macro_use]
 extern crate serde;
-
-pub extern crate image;
-
-extern crate rustdct;
-extern crate transpose;
 
 use serde::{Serialize, Deserialize};
 
@@ -68,7 +58,7 @@ pub(crate) use traits::BitSet;
 /// you just want to start hashing images and don't care about the details, it's as simple as:
 ///
 /// ```rust
-/// use img_hash::HasherConfig;
+/// use image_hasher::HasherConfig;
 ///
 /// let hasher = HasherConfig::new().to_hasher();
 /// // hasher.hash_image(image);
@@ -110,7 +100,7 @@ pub(crate) use traits::BitSet;
 /// produce more optimal code for generating and comparing hashes.
 ///
 /// ```rust
-/// # use img_hash::*;
+/// # use image_hasher::*;
 ///
 /// // Use default container type, good for any hash size
 /// let config = HasherConfig::new();

@@ -1,8 +1,4 @@
-img_hash [![Build Status](https://travis-ci.org/abonander/img_hash.svg?branch=master)](https://travis-ci.org/abonander/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
-========
-
-##### Now builds on stable Rust! (But needs nightly to bench.)
-
+# Image Hasher
 A library for getting perceptual hash values of images.
 
 Thanks to Dr. Neal Krawetz for the outlines of the Mean (aHash), Gradient (dHash), and DCT (pHash) perceptual hash algorithms:  
@@ -14,12 +10,14 @@ This crate can operate directly on buffers from the [PistonDevelopers/image][1] 
 
 [1]: https://github.com/PistonDevelopers/image 
 
+This is fork of [img_hash](https://github.com/abonander/img_hash) library, but with updated dependencies without any license changes.
+
 Usage
 =====
 [Documentation](https://docs.rs/img_hash)
 
 
-Add `img_hash` to your `Cargo.toml`:
+Add `imgage_hasher` to your `Cargo.toml`:
 
     [dependencies.img_hash]
     version = "3.0"
@@ -27,10 +25,7 @@ Add `img_hash` to your `Cargo.toml`:
 Example program:
 
 ```rust
- extern crate image;
- extern crate img_hash;
- 
- use img_hash::{HasherConfig, HashAlg};
+ use imgage_hasher::{HasherConfig, HashAlg};
 
  fn main() {
      let image1 = image::open("image1.png").unwrap();
