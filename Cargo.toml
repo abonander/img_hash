@@ -19,3 +19,8 @@ serde = { version = "1.0.137", features = ["derive"] }
 
 [[bin]]
 name = "hash_image"
+
+[dev-dependencies]
+anyhow = "1.0.57"
+clap = { version = "3.1.14", features = ["derive"] }
+image = "0.24.2"

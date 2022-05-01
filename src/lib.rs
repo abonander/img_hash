@@ -26,8 +26,8 @@ mod dct;
 mod traits;
 
 use dct::DctCtxt;
-use image::GrayImage;
 use image::imageops;
+use image::GrayImage;
 use serde::{Deserialize, Serialize};
 
 pub use image::imageops::FilterType;
@@ -411,7 +411,7 @@ impl<B: AsRef<[u8]>> ImageHash<B> {
     /// Format this image has as a hex string.
     pub fn to_hex(&self) -> String {
         static CHARS: &[u8] = b"0123456789abcdef";
-        
+
         let bytes = self.hash.as_ref();
         let mut v = Vec::with_capacity(bytes.len() * 2);
         for &byte in bytes {
@@ -419,9 +419,7 @@ impl<B: AsRef<[u8]>> ImageHash<B> {
             v.push(CHARS[(byte & 0xf) as usize]);
         }
 
-        unsafe {
-            String::from_utf8_unchecked(v)
-        }
+        unsafe { String::from_utf8_unchecked(v) }
     }
 }
 
