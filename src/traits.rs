@@ -25,9 +25,7 @@ pub trait HashBytes {
 
 impl HashBytes for Box<[u8]> {
     fn from_iter<I: Iterator<Item = u8>>(iter: I) -> Self {
-        // stable in 1.32, effectively the same thing
-        // iter.collect()
-        iter.collect::<Vec<u8>>().into_boxed_slice()
+        iter.collect()
     }
 
     fn max_bits() -> usize {

@@ -1,21 +1,21 @@
 [package]
 
 name = "img_hash"
-version = "3.3.0"
-authors = ["Austin Bonander <austin.bonander@gmail.com>"]
+version = "3.3.1"
+authors = ["Austin Bonander <austin.bonander@gmail.com>", "JMA <archer884@zoho.com"]
 description = "A simple library that provides perceptual hashing and difference calculation for images."
 license = "MIT OR Apache-2.0"
 documentation = "http://docs.rs/img_hash"
 keywords = ["image", "hash", "perceptual", "difference"]
-repository = "http://github.com/abonander/img_hash"
+repository = "https://github.com/archer884/img_hash"
 edition = "2018"
 readme = "README.md"
 
 [dependencies]
 base64 = "0.13.0"
-image = { version = "0.23.14", default-features = false }
-rustdct = "0.6.0"
-serde = { version = "1.0.130", features = ["derive"] }
+image = { version = "0.24.2", default-features = false }
+rustdct = "0.7.0"
+serde = { version = "1.0.137", features = ["derive"] }
 
 [[bin]]
 name = "hash_image"

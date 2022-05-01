@@ -27,7 +27,7 @@ pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B 
 macro_rules! gen_hash {
     ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => {{
         #[allow(deprecated)] // deprecated as of 0.22
-        let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::channel_count() as u32;
+        let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::CHANNEL_COUNT as u32;
 
         let group_len = ($width * 4) as usize;
 
