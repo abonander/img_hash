@@ -2,7 +2,7 @@
 // https://github.com/commonsmachinery/blockhash-python/blob/e8b009d/blockhash.py
 // Main site: http://blockhash.io
 
-use std::{cmp::Ordering, mem, ops::AddAssign};
+use std::{cmp::Ordering, ops::AddAssign};
 
 use image::{GenericImageView, Pixel};
 
@@ -163,7 +163,7 @@ fn sum_px(chans: &[u8]) -> u32 {
             if chans[3] == 0 {
                 255 * 3
             } else {
-                sum_px(&chans[..3])
+                chans[..3].iter().map(|&x| x as u32).sum()
             }
         }
         3 => chans.iter().map(|&x| x as u32).sum(),
@@ -182,73 +182,59 @@ fn sum_px(chans: &[u8]) -> u32 {
 fn get_median<T: PartialOrd + Copy>(data: &[T]) -> T {
     let mut scratch = data.to_owned();
     let median = scratch.len() / 2;
-    *qselect_inplace(&mut scratch, median)
+    *qselect_inplace(&mut scratch, median).expect("qselect_inplace seems to have failed")
 }
 
 const SORT_THRESH: usize = 8;
 
-fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
+fn qselect_inplace<T: PartialOrd + Copy>(data: &mut [T], k: usize) -> Option<&mut T> {
     let len = data.len();
-
     assert!(
         k < len,
         "Called qselect_inplace with k = {} and data length: {}",
         k,
         len
     );
-
+    let mut left = 0;
+    let mut right = len - 1;
     if len < SORT_THRESH {
         data.sort_by(|left, right| left.partial_cmp(right).unwrap_or(Ordering::Less));
-        return &mut data[k];
+        return Some(&mut data[k]);
     }
 
-    let pivot_idx = partition(data);
-    match k.cmp(&pivot_idx) {
-        Ordering::Less => qselect_inplace(&mut data[..pivot_idx], k),
-        Ordering::Equal => &mut data[pivot_idx],
-        Ordering::Greater => qselect_inplace(&mut data[pivot_idx + 1..], k - pivot_idx - 1),
-    }
-}
-
-fn partition<T: PartialOrd>(data: &mut [T]) -> usize {
-    let len = data.len();
-
-    let pivot_idx = {
-        let first = (&data[0], 0);
-        let mid = (&data[len / 2], len / 2);
-        let last = (&data[len - 1], len - 1);
-
-        median_of_3(&first, &mid, &last).1
-    };
-
-    data.swap(pivot_idx, len - 1);
-
-    let mut curr = 0;
-
-    for i in 0..len - 1 {
-        if data[i] < data[len - 1] {
-            data.swap(i, curr);
-            curr += 1;
+    let mut pivot_idx = right / 2;
+    while left <= right {
+        pivot_idx = partition(data, left, right, pivot_idx);
+        if pivot_idx == k {
+            return Some(&mut data[k]);
+        } else if pivot_idx > k - 1 {
+            right = pivot_idx - 1
+        } else {
+            left = pivot_idx + 1
         }
     }
 
-    data.swap(curr, len - 1);
-
-    curr
+    None
 }
 
-fn median_of_3<T: PartialOrd>(mut x: T, mut y: T, mut z: T) -> T {
-    if x > y {
-        mem::swap(&mut x, &mut y);
+fn partition<T: PartialOrd + Copy>(
+    data: &mut [T],
+    left: usize,
+    right: usize,
+    pivot_idx: usize,
+) -> usize {
+    let pivot_val: T = data[pivot_idx];
+
+    data.swap(pivot_idx, right);
+
+    let mut store_index = left;
+    for idx in left..(right - 1) {
+        if data[idx] < pivot_val {
+            data.swap(store_index, idx);
+            store_index += 1;
+        }
     }
 
-    if x > z {
-        mem::swap(&mut x, &mut z);
-    }
-
-    if x > z {
-        mem::swap(&mut y, &mut z);
-    }
-
-    y
+    data.swap(right, store_index);
+    store_index
 }
