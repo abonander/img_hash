@@ -188,7 +188,7 @@ impl Image for DynamicImage {
     type Buf = image::RgbaImage;
 
     fn to_grayscale(&self) -> Cow<GrayImage> {
-        self.as_luma8().map_or_else(|| Cow::Owned(self.to_luma()), Cow::Borrowed)
+        self.as_luma8().map_or_else(|| Cow::Owned(self.to_luma8()), Cow::Borrowed)
     }
 
     fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
