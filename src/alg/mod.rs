@@ -1,9 +1,11 @@
-mod blockhash;
+#![allow(clippy::needless_lifetimes)]
+use crate::CowImage::*;
+use crate::HashVals::*;
+use crate::{BitSet, HashCtxt, Image};
 
 use self::HashAlg::*;
-use crate::{BitSet, HashCtxt, Image};
-use crate::HashVals::*;
-use crate::CowImage::*;
+
+mod blockhash;
 
 /// Hash algorithms implemented by this crate.
 ///
@@ -73,12 +75,20 @@ pub enum HashAlg {
     Blockhash,
 }
 
-fn next_multiple_of_2(x: u32) -> u32 { x + 1 & !1 }
-fn next_multiple_of_4(x: u32) -> u32 { x + 3 & !3 }
+fn next_multiple_of_2(x: u32) -> u32 {
+    (x + 1) & !1
+}
+
+fn next_multiple_of_4(x: u32) -> u32 {
+    (x + 3) & !3
+}
 
 impl HashAlg {
-    pub (crate) fn hash_image<I, B>(&self, ctxt: &HashCtxt, image: &I) -> B
-    where I: Image, B: BitSet {
+    pub(crate) fn hash_image<I, B>(&self, ctxt: &HashCtxt, image: &I) -> B
+    where
+        I: Image,
+        B: BitSet,
+    {
         let post_gauss = ctxt.gauss_preproc(image);
 
         let HashCtxt { width, height, .. } = *ctxt;
@@ -102,18 +112,21 @@ impl HashAlg {
             (Mean, Bytes(ref bytes)) => B::from_bools(mean_hash_u8(bytes)),
             (Gradient, Floats(ref floats)) => B::from_bools(gradient_hash(floats, rowstride)),
             (Gradient, Bytes(ref bytes)) => B::from_bools(gradient_hash(bytes, rowstride)),
-            (VertGradient, Floats(ref floats)) => B::from_bools(vert_gradient_hash(floats,
-                                                                                   rowstride)),
+            (VertGradient, Floats(ref floats)) => {
+                B::from_bools(vert_gradient_hash(floats, rowstride))
+            }
             (VertGradient, Bytes(ref bytes)) => B::from_bools(vert_gradient_hash(bytes, rowstride)),
-            (DoubleGradient, Floats(ref floats)) => B::from_bools(double_gradient_hash(floats,
-                                                                                       rowstride)),
-            (DoubleGradient, Bytes(ref bytes)) => B::from_bools(double_gradient_hash(bytes,
-                                                                                     rowstride)),
+            (DoubleGradient, Floats(ref floats)) => {
+                B::from_bools(double_gradient_hash(floats, rowstride))
+            }
+            (DoubleGradient, Bytes(ref bytes)) => {
+                B::from_bools(double_gradient_hash(bytes, rowstride))
+            }
             (Blockhash, _) => unreachable!(),
         }
     }
 
-    pub (crate) fn round_hash_size(&self, width: u32, height: u32) -> (u32, u32) {
+    pub(crate) fn round_hash_size(&self, width: u32, height: u32) -> (u32, u32) {
         match *self {
             DoubleGradient => (next_multiple_of_2(width), next_multiple_of_2(height)),
             Blockhash => (next_multiple_of_4(width), next_multiple_of_4(height)),
@@ -121,7 +134,7 @@ impl HashAlg {
         }
     }
 
-    pub (crate) fn resize_dimensions(&self, width: u32, height: u32) -> (u32, u32) {
+    pub(crate) fn resize_dimensions(&self, width: u32, height: u32) -> (u32, u32) {
         match *self {
             Mean => (width, height),
             Blockhash => panic!("Blockhash algorithm does not resize"),
@@ -144,19 +157,36 @@ fn mean_hash_f32<'a>(luma: &'a [f32]) -> impl Iterator<Item = bool> + 'a {
 
 /// The guts of the gradient hash separated so we can reuse them
 fn gradient_hash_impl<I>(luma: I) -> impl Iterator<Item = bool>
-    where I: IntoIterator + Clone, <I as IntoIterator>::Item: PartialOrd {
-    luma.clone().into_iter().skip(1).zip(luma).map(|(this, last)| last < this)
+where
+    I: IntoIterator + Clone,
+    <I as IntoIterator>::Item: PartialOrd,
+{
+    luma.clone()
+        .into_iter()
+        .skip(1)
+        .zip(luma)
+        .map(|(this, last)| last < this)
 }
 
-fn gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+fn gradient_hash<'a, T: PartialOrd>(
+    luma: &'a [T],
+    rowstride: usize,
+) -> impl Iterator<Item = bool> + 'a {
     luma.chunks(rowstride).flat_map(gradient_hash_impl)
 }
 
-fn vert_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
-    (0 .. rowstride).map(move |col_start| luma[col_start..].iter().step_by(rowstride))
+fn vert_gradient_hash<'a, T: PartialOrd>(
+    luma: &'a [T],
+    rowstride: usize,
+) -> impl Iterator<Item = bool> + 'a {
+    (0..rowstride)
+        .map(move |col_start| luma[col_start..].iter().step_by(rowstride))
         .flat_map(gradient_hash_impl)
 }
 
-fn double_gradient_hash<'a, T: PartialOrd>(luma: &'a [T], rowstride: usize) -> impl Iterator<Item = bool> + 'a {
+fn double_gradient_hash<'a, T: PartialOrd>(
+    luma: &'a [T],
+    rowstride: usize,
+) -> impl Iterator<Item = bool> + 'a {
     gradient_hash(luma, rowstride).chain(vert_gradient_hash(luma, rowstride))
 }

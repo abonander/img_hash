@@ -22,32 +22,27 @@
 #![deny(missing_docs)]
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-
 #[macro_use]
 extern crate serde;
-
-use serde::{Serialize, Deserialize};
-
-use image::{GrayImage};
-use image::imageops;
-
-pub use image::imageops::FilterType;
 
 use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 
-mod dct;
+use image::imageops;
+pub use image::imageops::FilterType;
+use image::GrayImage;
+use serde::{Deserialize, Serialize};
 
+pub use alg::HashAlg;
 use dct::DctCtxt;
+pub(crate) use traits::BitSet;
+pub use traits::{DiffImage, HashBytes, Image};
+
+mod dct;
 
 mod alg;
 mod traits;
-
-pub use alg::HashAlg;
-
-pub use traits::{HashBytes, Image, DiffImage};
-pub(crate) use traits::BitSet;
 
 /// **Start here**. Configuration builder for [`Hasher`](::Hasher).
 ///
@@ -178,7 +173,11 @@ impl<B: HashBytes> HasherConfig<B> {
     /// When using DCT preprocessing having `width` and `height` be the same value will improve
     /// hashing performance as only one set of coefficients needs to be used.
     pub fn hash_size(self, width: u32, height: u32) -> Self {
-        Self { width, height, ..self  }
+        Self {
+            width,
+            height,
+            ..self
+        }
     }
 
     /// Set the filter used to resize images during hashing.
@@ -186,7 +185,10 @@ impl<B: HashBytes> HasherConfig<B> {
     /// Note when picking a filter that images are almost always reduced in size.
     /// Has no effect with the Blockhash algorithm as it does not resize.
     pub fn resize_filter(self, resize_filter: FilterType) -> Self {
-        Self { resize_filter, ..self }
+        Self {
+            resize_filter,
+            ..self
+        }
     }
 
     /// Set the algorithm used to generate hashes.
@@ -255,7 +257,10 @@ impl<B: HashBytes> HasherConfig<B> {
     /// * http://homepages.inf.ed.ac.uk/rbf/HIPR2/log.htm
     /// (Difference of Gaussians is an approximation of a Laplacian of Gaussian filter)
     pub fn preproc_diff_gauss_sigmas(self, sigma_a: f32, sigma_b: f32) -> Self {
-        Self { gauss_sigmas: Some([sigma_a, sigma_b]), ..self }
+        Self {
+            gauss_sigmas: Some([sigma_a, sigma_b]),
+            ..self
+        }
     }
 
     /// Create a [`Hasher`](struct.Hasher.html) from this config which can be used to hash images.
@@ -264,12 +269,24 @@ impl<B: HashBytes> HasherConfig<B> {
     /// If the chosen hash size (`width x height`, rounded for the algorithm if necessary)
     /// is too large for the chosen container type (`B::max_bits()`).
     pub fn to_hasher(&self) -> Hasher<B> {
-        let Self { hash_alg, width, height, gauss_sigmas, resize_filter, dct, .. } = *self;
+        let Self {
+            hash_alg,
+            width,
+            height,
+            gauss_sigmas,
+            resize_filter,
+            dct,
+            ..
+        } = *self;
 
         let (width, height) = hash_alg.round_hash_size(width, height);
 
-        assert!((width * height) as usize <= B::max_bits(),
-                "hash size too large for container: {} x {}", width, height);
+        assert!(
+            (width * height) as usize <= B::max_bits(),
+            "hash size too large for container: {} x {}",
+            width,
+            height
+        );
 
         // Blockhash doesn't resize the image so don't waste time calculating coefficients
         let dct_coeffs = if dct && hash_alg != HashAlg::Blockhash {
@@ -283,12 +300,14 @@ impl<B: HashBytes> HasherConfig<B> {
         Hasher {
             ctxt: HashCtxt {
                 gauss_sigmas,
-                dct_ctxt: dct_coeffs, width, height, resize_filter,
+                dct_ctxt: dct_coeffs,
+                width,
+                height,
+                resize_filter,
             },
             hash_alg,
-            bytes_type: PhantomData
+            bytes_type: PhantomData,
         }
-
     }
 }
 
@@ -315,11 +334,17 @@ pub struct Hasher<B = Box<[u8]>> {
     bytes_type: PhantomData<B>,
 }
 
-impl<B> Hasher<B> where B: HashBytes {
+impl<B> Hasher<B>
+where
+    B: HashBytes,
+{
     /// Calculate a hash for the given image with the configured options.
     pub fn hash_image<I: Image>(&self, img: &I) -> ImageHash<B> {
         let hash = self.hash_alg.hash_image(&self.ctxt, img);
-        ImageHash { hash, __backcompat: () }
+        ImageHash {
+            hash,
+            __backcompat: (),
+        }
     }
 }
 
@@ -331,7 +356,7 @@ enum CowImage<'a, I: Image> {
 impl<'a, I: Image> CowImage<'a, I> {
     fn to_grayscale(&self) -> Cow<GrayImage> {
         match *self {
-            CowImage::Borrowed( img) => img.to_grayscale(),
+            CowImage::Borrowed(img) => img.to_grayscale(),
             CowImage::Owned(ref img) => img.to_grayscale(),
         }
     }
@@ -368,10 +393,10 @@ impl HashCtxt {
     /// If DCT preprocessing is configured, produce a vector of floats, otherwise a vector of bytes.
     fn calc_hash_vals(&self, img: &GrayImage, width: u32, height: u32) -> HashVals {
         if let Some(ref dct_ctxt) = self.dct_ctxt {
-            let img = imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(),
-                                       self.resize_filter);
+            let img =
+                imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(), self.resize_filter);
 
-            let img_vals  = img.into_vec();
+            let img_vals = img.into_vec();
             let input_len = img_vals.len() * 2;
 
             let mut vals_with_scratch = Vec::with_capacity(input_len);
@@ -401,7 +426,7 @@ pub struct ImageHash<B = Box<[u8]>> {
 }
 
 /// Error that can happen constructing a `ImageHash` from bytes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum InvalidBytesError {
     /// Byte slice passed to `from_bytes` was the wrong length.
     BytesWrongLength {
@@ -411,12 +436,14 @@ pub enum InvalidBytesError {
         found: usize,
     },
     /// String passed was not valid base64.
-    Base64(base64::DecodeError)
+    Base64(base64::DecodeError),
 }
 
 impl<B: HashBytes> ImageHash<B> {
     /// Get the bytes of this hash.
-    pub fn as_bytes(&self) -> &[u8] { self.hash.as_slice() }
+    pub fn as_bytes(&self) -> &[u8] {
+        self.hash.as_slice()
+    }
 
     /// Create an `ImageHash` instance from the given bytes.
     ///
@@ -439,7 +466,7 @@ impl<B: HashBytes> ImageHash<B> {
     /// Calculate the Hamming distance between this and `other`.
     ///
     /// Equivalent to counting the 1-bits of the XOR of the two hashes.
-    /// 
+    ///
     /// Essential to determining the perceived difference between `self` and `other`.
     ///
     /// ### Note
@@ -454,7 +481,7 @@ impl<B: HashBytes> ImageHash<B> {
     /// ## Errors:
     /// Returns `InvaidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64`.
     /// Otherwise returns the same errors as `from_bytes`.
-    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError>{
+    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError> {
         let bytes = base64::decode(encoded_hash).map_err(InvalidBytesError::Base64)?;
 
         Self::from_bytes(&bytes)
@@ -601,7 +628,7 @@ mod test {
         let decoded_result = ImageHash::from_base64(&*base64_string);
 
         assert_eq!(decoded_result.unwrap(), hash1);
-    }  
+    }
 
     #[test]
     fn base64_error_on_empty() {
@@ -620,7 +647,7 @@ mod test {
         extern crate test;
 
         use ::{HashType, ImageHash};
-        
+
         use self::test::Bencher;
 
         const BENCH_HASH_SIZE: u32 = 8;
@@ -628,7 +655,7 @@ mod test {
 
         fn bench_hash(b: &mut Bencher, hash_type: HashType) {
             let test_img = gen_test_img(TEST_IMAGE_SIZE, TEST_IMAGE_SIZE);
-        
+
             b.iter(|| ImageHash::hash(&test_img, BENCH_HASH_SIZE, hash_type));
         }
 
@@ -672,7 +699,7 @@ mod test {
 
             // Explicit slicing is necessary
             b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
-        
+
             test::black_box(&output);
         }
 

@@ -1,7 +1,7 @@
+use std::sync::Arc;
+
 use rustdct::{DctPlanner, TransformType2And3};
 use transpose::transpose;
-
-use std::sync::Arc;
 
 pub const SIZE_MULTIPLIER: u32 = 2;
 pub const SIZE_MULTIPLIER_U: usize = SIZE_MULTIPLIER as usize;
@@ -43,7 +43,12 @@ impl DctCtxt {
     /// ### Panics
     /// If `self.width * self.height * 2 != packed_2d.len()`
     pub fn dct_2d(&self, mut packed_2d: Vec<f32>) -> Vec<f32> {
-        let Self { ref row_dct, ref col_dct, width, height } = *self;
+        let Self {
+            ref row_dct,
+            ref col_dct,
+            width,
+            height,
+        } = *self;
 
         let trunc_len = width * height;
         assert_eq!(trunc_len * 2, packed_2d.len());
@@ -51,15 +56,13 @@ impl DctCtxt {
         {
             let (packed_2d, scratch) = packed_2d.split_at_mut(trunc_len);
 
-            for (row_in, row_out) in packed_2d.chunks_mut(width)
-                .zip(scratch.chunks_mut(width)) {
+            for (row_in, row_out) in packed_2d.chunks_mut(width).zip(scratch.chunks_mut(width)) {
                 row_dct.process_dct2_with_scratch(row_in, row_out);
             }
 
             transpose(scratch, packed_2d, width, height);
 
-            for (row_in, row_out) in packed_2d.chunks_mut(height)
-                .zip(scratch.chunks_mut(height)) {
+            for (row_in, row_out) in packed_2d.chunks_mut(height).zip(scratch.chunks_mut(height)) {
                 col_dct.process_dct2_with_scratch(row_in, row_out);
             }
 
@@ -83,11 +86,15 @@ impl DctCtxt {
 fn crop_2d_dct<T: Copy>(mut packed: Vec<T>, rowstride: usize) -> Vec<T> {
     // assert that the rowstride was previously multiplied by SIZE_MULTIPLIER
     assert_eq!(rowstride % SIZE_MULTIPLIER_U, 0);
-    assert!(rowstride / SIZE_MULTIPLIER_U > 0, "rowstride cannot be cropped: {}", rowstride);
+    assert!(
+        rowstride / SIZE_MULTIPLIER_U > 0,
+        "rowstride cannot be cropped: {}",
+        rowstride
+    );
 
     let new_rowstride = rowstride / SIZE_MULTIPLIER_U;
 
-    for new_row in 0 .. packed.len() / (rowstride * SIZE_MULTIPLIER_U) {
+    for new_row in 0..packed.len() / (rowstride * SIZE_MULTIPLIER_U) {
         let (dest, src) = packed.split_at_mut(new_row * new_rowstride + rowstride);
         let dest_start = dest.len() - new_rowstride;
         let src_start = new_rowstride * new_row;
@@ -103,7 +110,7 @@ fn crop_2d_dct<T: Copy>(mut packed: Vec<T>, rowstride: usize) -> Vec<T> {
 
 #[test]
 fn test_crop_2d_dct() {
-    let packed: Vec<i32> = (0 .. 64).collect();
+    let packed: Vec<i32> = (0..64).collect();
     assert_eq!(
         crop_2d_dct(packed.clone(), 8),
         [
@@ -111,12 +118,10 @@ fn test_crop_2d_dct() {
             8, 9, 10, 11, // 12, 13, 14, 15
             16, 17, 18, 19, // 20, 21, 22, 23,
             24, 25, 26, 27, // 28, 29, 30, 31,
-            // 32 .. 64
+                // 32 .. 64
         ]
     );
 }
 
 #[test]
-fn test_transpose() {
-
-}
+fn test_transpose() {}
