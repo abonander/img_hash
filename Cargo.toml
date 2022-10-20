@@ -24,7 +24,7 @@ nightly = []
 [dependencies]
 base64 = "0.20.0-alpha.1"
 image = { version = ">=0.24,<0.25", default-features = false }
-rustdct = "0.5.1" # TODO, versions >=0.6 have breaking change
+rustdct = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.2"
 
