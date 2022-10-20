@@ -1,4 +1,4 @@
-use rustdct::{DCTplanner, TransformType2And3};
+use rustdct::{DctPlanner, TransformType2And3};
 use transpose::transpose;
 
 use std::sync::Arc;
@@ -15,7 +15,7 @@ pub struct DctCtxt {
 
 impl DctCtxt {
     pub fn new(width: u32, height: u32) -> Self {
-        let mut planner = DCTplanner::new();
+        let mut planner = DctPlanner::new();
         let width = width as usize * SIZE_MULTIPLIER_U;
         let height = height as usize * SIZE_MULTIPLIER_U;
 
@@ -53,14 +53,14 @@ impl DctCtxt {
 
             for (row_in, row_out) in packed_2d.chunks_mut(width)
                 .zip(scratch.chunks_mut(width)) {
-                row_dct.process_dct2(row_in, row_out);
+                row_dct.process_dct2_with_scratch(row_in, row_out);
             }
 
             transpose(scratch, packed_2d, width, height);
 
             for (row_in, row_out) in packed_2d.chunks_mut(height)
                 .zip(scratch.chunks_mut(height)) {
-                col_dct.process_dct2(row_in, row_out);
+                col_dct.process_dct2_with_scratch(row_in, row_out);
             }
 
             transpose(scratch, packed_2d, width, height);
