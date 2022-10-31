@@ -1,7 +1,7 @@
-img_hash [![Build Status](https://travis-ci.org/abonander/img_hash.svg?branch=master)](https://travis-ci.org/abonander/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
-========
+visual-hash
+===========
 
-##### Now builds on stable Rust! (But needs nightly to bench.)
+A fork of [img_hash](https://github.com/abonander/img_hash)
 
 A library for getting perceptual hash values of images.
 
@@ -16,36 +16,51 @@ This crate can operate directly on buffers from the [PistonDevelopers/image][1] 
 
 Usage
 =====
-[Documentation](https://docs.rs/img_hash)
+[Documentation](https://docs.rs/visual-hash)
 
 
-Add `img_hash` to your `Cargo.toml`:
+Add `visual-hash` to your `Cargo.toml`:
 
-    [dependencies.img_hash]
+    [dependencies.visual-hash]
     version = "3.0"
     
 Example program:
 
 ```rust
- extern crate image;
- extern crate img_hash;
- 
- use img_hash::{HasherConfig, HashAlg};
+use clap::Parser;
+use visual_hash::HasherConfig;
 
- fn main() {
-     let image1 = image::open("image1.png").unwrap();
-     let image2 = image::open("image2.png").unwrap();
-     
-     let hasher = HasherConfig::new().to_hasher();
+#[derive(Clone, Debug, Parser)]
+struct Args {
+    left: String,
+    right: String,
+}
 
-     let hash1 = hasher.hash_image(&image1);
-     let hash2 = hasher.hash_image(&image2);
-     
-     println!("Image1 hash: {}", hash1.to_base64());
-     println!("Image2 hash: {}", hash2.to_base64());
-     
-     println!("Hamming Distance: {}", hash1.dist(&hash2));
- }
+fn main() {
+    let args = Args::parse();
+
+    if let Err(e) = run(&args) {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+}
+
+fn run(args: &Args) -> anyhow::Result<()> {
+    let image1 = image::open(&args.left)?;
+    let image2 = image::open(&args.right)?;
+
+    let hasher = HasherConfig::new().to_hasher();
+
+    let hash1 = hasher.hash_image(&image1);
+    let hash2 = hasher.hash_image(&image2);
+
+    println!("Image1 hash: {}", hash1.to_base64());
+    println!("Image2 hash: {}", hash2.to_base64());
+
+    println!("Hamming Distance: {}", hash1.dist(&hash2));
+
+    Ok(())
+}
 ```
    
 Benchmarking
