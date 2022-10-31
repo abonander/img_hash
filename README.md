@@ -1,5 +1,7 @@
-img_hash [![Build Status](https://travis-ci.org/abonander/img_hash.svg?branch=master)](https://travis-ci.org/abonander/img_hash) [![Crates.io shield](https://img.shields.io/crates/v/img_hash.svg)](https://crates.io/crates/img_hash)
-========
+ihash
+=====
+
+A fork of [img_hash](https://github.com/abonander/img_hash)
 
 A library for getting perceptual hash values of images.
 
@@ -14,7 +16,7 @@ This crate can operate directly on buffers from the [PistonDevelopers/image][1] 
 
 Usage
 =====
-[Documentation](https://docs.rs/img_hash)
+[Documentation](https://docs.rs/ihash)
 
 
 Add `img_hash` to your `Cargo.toml`:
