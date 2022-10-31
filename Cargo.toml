@@ -1,26 +1,26 @@
 [package]
 
-name = "img_hash"
-version = "3.3.1"
+name = "visual-hash"
+version = "3.3.2"
 authors = ["Austin Bonander <austin.bonander@gmail.com>", "JMA <archer884@zoho.com"]
 description = "A simple library that provides perceptual hashing and difference calculation for images."
 license = "MIT OR Apache-2.0"
-documentation = "http://docs.rs/img_hash"
+documentation = "http://docs.rs/visual-hash"
 keywords = ["image", "hash", "perceptual", "difference"]
-repository = "https://github.com/archer884/img_hash"
-edition = "2018"
+repository = "https://github.com/archer884/visual-hash"
+edition = "2021"
 readme = "README.md"
 
 [dependencies]
-base64 = "0.13.0"
-image = { version = "0.24.2", default-features = false }
+base64 = "0.13.1"
+image = { version = "0.24.4", default-features = false }
 rustdct = "0.7.0"
-serde = { version = "1.0.137", features = ["derive"] }
+serde = { version = "1.0.147", features = ["derive"] }
 
 [[bin]]
 name = "hash_image"
 
 [dev-dependencies]
-anyhow = "1.0.57"
-clap = { version = "3.1.14", features = ["derive"] }
-image = "0.24.2"
+anyhow = "1.0.66"
+clap = { version = "4.0.18", features = ["derive"] }
+image = "0.24.4"

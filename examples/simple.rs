@@ -1,5 +1,5 @@
 use clap::Parser;
-use img_hash::HasherConfig;
+use visual_hash::HasherConfig;
 
 #[derive(Clone, Debug, Parser)]
 struct Args {

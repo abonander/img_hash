@@ -1,5 +1,5 @@
-ihash
-=====
+visual-hash
+===========
 
 A fork of [img_hash](https://github.com/abonander/img_hash)
 
@@ -16,19 +16,19 @@ This crate can operate directly on buffers from the [PistonDevelopers/image][1] 
 
 Usage
 =====
-[Documentation](https://docs.rs/ihash)
+[Documentation](https://docs.rs/visual-hash)
 
 
-Add `img_hash` to your `Cargo.toml`:
+Add `visual-hash` to your `Cargo.toml`:
 
-    [dependencies.img_hash]
+    [dependencies.visual-hash]
     version = "3.0"
     
 Example program:
 
 ```rust
 use clap::Parser;
-use img_hash::HasherConfig;
+use visual_hash::HasherConfig;
 
 #[derive(Clone, Debug, Parser)]
 struct Args {

@@ -1,6 +1,6 @@
 //! Hash an image and print the Base64 value
 
-use img_hash::HasherConfig;
+use visual_hash::HasherConfig;
 
 use std::env;
 
