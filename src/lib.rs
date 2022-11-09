@@ -397,7 +397,7 @@ impl HashCtxt {
                 imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(), self.resize_filter);
 
             let img_vals = img.into_vec();
-            let input_len = img_vals.len() * 2;
+            let input_len = img_vals.len() + dct_ctxt.required_scratch();
 
             let mut vals_with_scratch = Vec::with_capacity(input_len);
 
