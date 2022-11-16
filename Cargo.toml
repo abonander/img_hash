@@ -30,6 +30,7 @@ transpose = "0.2"
 
 [dev-dependencies]
 criterion = "0.4"
+rand = { version = "0.8", features = ["small_rng"] }
 
 [[bench]]
 name = "byte_to_float"
