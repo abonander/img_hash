@@ -20,6 +20,7 @@ readme = "README.md"
 
 [features]
 nightly = []
+bench = []
 
 [dependencies]
 base64 = "0.20.0-alpha.1"
@@ -34,6 +35,10 @@ rand = { version = "0.8", features = ["small_rng"] }
 
 [[bench]]
 name = "byte_to_float"
+harness = false
+
+[[bench]]
+name = "hash"
 harness = false
 
 [[bin]]
