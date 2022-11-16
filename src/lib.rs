@@ -542,25 +542,32 @@ mod test {
     }
 
     macro_rules! test_hash_equality {
-        ($fnname:ident, $size:expr, $type:ident) => {
+        ($fnname:ident, $size:expr, $type:ident, $preproc_dct:expr) => {
             #[test]
             fn $fnname() {
                 // square, powers of two
-                test_hash_equality!(1024, 1024, $size, $type);
+                test_hash_equality!(1024, 1024, $size, $type, $preproc_dct);
                 // rectangular, powers of two
-                test_hash_equality!(512, 256, $size, $type);
+                test_hash_equality!(512, 256, $size, $type, $preproc_dct);
                 // odd size, square
-                test_hash_equality!(967, 967, $size, $type);
+                test_hash_equality!(967, 967, $size, $type, $preproc_dct);
                 // odd size, rectangular
-                test_hash_equality!(967, 1023, $size, $type);
+                test_hash_equality!(967, 1023, $size, $type, $preproc_dct);
             }
         };
-        ($width:expr, $height:expr, $size:expr, $type:ident) => {{
+        ($width:expr, $height:expr, $size:expr, $type:ident, $preproc_dct:expr) => {{
             let test_img = gen_test_img($width, $height);
-            let hasher = HasherConfig::new()
+            let mut cfg = HasherConfig::new()
                 .hash_alg(HashAlg::$type)
-                .hash_size($size, $size)
-                .to_hasher();
+                .hash_size($size, $size);
+            if $preproc_dct {
+                if HashAlg::$type != HashAlg::Blockhash {
+                    cfg = cfg.preproc_dct();
+                } else {
+                    cfg = cfg.preproc_diff_gauss();
+                }
+            }
+            let hasher = cfg.to_hasher();
             let hash1 = hasher.hash_image(&test_img);
             let hash2 = hasher.hash_image(&test_img);
             assert_eq!(hash1, hash2);
@@ -572,9 +579,13 @@ mod test {
             mod $modname {
                 use super::*;
 
-                test_hash_equality!(hash_eq_8, 8, $type);
-                test_hash_equality!(hash_eq_16, 16, $type);
-                test_hash_equality!(hash_eq_32, 32, $type);
+                test_hash_equality!(hash_eq_8, 8, $type, false);
+                test_hash_equality!(hash_eq_16, 16, $type, false);
+                test_hash_equality!(hash_eq_32, 32, $type, false);
+
+                test_hash_equality!(hash_eq_8_dct, 8, $type, true);
+                test_hash_equality!(hash_eq_16_dct, 16, $type, true);
+                test_hash_equality!(hash_eq_32_dct, 32, $type, true);
             }
         };
     }
