@@ -397,7 +397,7 @@ impl HashCtxt {
                 imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(), self.resize_filter);
 
             let img_vals = img.into_vec();
-            let input_len = img_vals.len() * 2;
+            let input_len = img_vals.len() + dct_ctxt.required_scratch();
 
             let mut vals_with_scratch = Vec::with_capacity(input_len);
 
@@ -519,48 +519,57 @@ fn debug_filter_type(ft: &FilterType) -> &'static str {
     }
 }
 
-/*
 #[cfg(test)]
 mod test {
-    extern crate rand;
+    use image::{ImageBuffer, Rgba};
 
-    use serialize::base64::*;
+    use rand::{rngs::SmallRng, RngCore, SeedableRng};
 
-    use image::{Rgba, ImageBuffer};
-
-    use self::rand::{weak_rng, Rng};
-
-    use super::{DCT2DFunc, HashType, ImageHash};
+    use super::{HashAlg, HasherConfig, ImageHash};
 
     type RgbaBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
     fn gen_test_img(width: u32, height: u32) -> RgbaBuf {
         let len = (width * height * 4) as usize;
         let mut buf = Vec::with_capacity(len);
-        unsafe { buf.set_len(len); } // We immediately fill the buffer.
-        weak_rng().fill_bytes(&mut *buf);
+        unsafe {
+            buf.set_len(len);
+        } // We immediately fill the buffer.
+        let mut rng = SmallRng::seed_from_u64(0xc0ffee);
+        rng.fill_bytes(&mut *buf);
 
         ImageBuffer::from_raw(width, height, buf).unwrap()
     }
 
     macro_rules! test_hash_equality {
-        ($fnname:ident, $size:expr, $type:ident) => {
+        ($fnname:ident, $size:expr, $type:ident, $preproc_dct:expr) => {
             #[test]
             fn $fnname() {
                 // square, powers of two
-                test_hash_equality!(1024, 1024, $size, $type);
+                test_hash_equality!(1024, 1024, $size, $type, $preproc_dct);
                 // rectangular, powers of two
-                test_hash_equality!(512, 256, $size, $type);
+                test_hash_equality!(512, 256, $size, $type, $preproc_dct);
                 // odd size, square
-                test_hash_equality!(967, 967, $size, $type);
+                test_hash_equality!(967, 967, $size, $type, $preproc_dct);
                 // odd size, rectangular
-                test_hash_equality!(967, 1023, $size, $type);
+                test_hash_equality!(967, 1023, $size, $type, $preproc_dct);
             }
         };
-        ($width:expr, $height:expr, $size:expr, $type:ident) => {{
+        ($width:expr, $height:expr, $size:expr, $type:ident, $preproc_dct:expr) => {{
             let test_img = gen_test_img($width, $height);
-            let hash1 = ImageHash::hash(&test_img, $size, HashType::$type);
-            let hash2 = ImageHash::hash(&test_img, $size, HashType::$type);
+            let mut cfg = HasherConfig::new()
+                .hash_alg(HashAlg::$type)
+                .hash_size($size, $size);
+            if $preproc_dct {
+                if HashAlg::$type != HashAlg::Blockhash {
+                    cfg = cfg.preproc_dct();
+                } else {
+                    cfg = cfg.preproc_diff_gauss();
+                }
+            }
+            let hasher = cfg.to_hasher();
+            let hash1 = hasher.hash_image(&test_img);
+            let hash2 = hasher.hash_image(&test_img);
             assert_eq!(hash1, hash2);
         }};
     }
@@ -568,194 +577,48 @@ mod test {
     macro_rules! test_hash_type {
         ($type:ident, $modname:ident) => {
             mod $modname {
-                use {HashType, ImageHash};
                 use super::*;
 
-                test_hash_equality!(hash_eq_8, 8, $type);
-                test_hash_equality!(hash_eq_16, 16, $type);
-                test_hash_equality!(hash_eq_32, 32, $type);
+                test_hash_equality!(hash_eq_8, 8, $type, false);
+                test_hash_equality!(hash_eq_16, 16, $type, false);
+                test_hash_equality!(hash_eq_32, 32, $type, false);
+
+                test_hash_equality!(hash_eq_8_dct, 8, $type, true);
+                test_hash_equality!(hash_eq_16_dct, 16, $type, true);
+                test_hash_equality!(hash_eq_32_dct, 32, $type, true);
             }
-        }
+        };
     }
 
     test_hash_type!(Mean, mean);
-    test_hash_type!(Block, blockhash);
+    test_hash_type!(Blockhash, blockhash);
     test_hash_type!(Gradient, gradient);
     test_hash_type!(DoubleGradient, dbl_gradient);
-    test_hash_type!(DCT, dct);
-
-    #[test]
-    fn dct_2d_equality() {
-        fn dummy_dct(_ : &[f64], _: usize) -> Vec<f64> {
-            unimplemented!();
-        }
-
-        let dct1 = DCT2DFunc(dummy_dct);
-        let dct2 = DCT2DFunc(dummy_dct);
-
-        assert_eq!(dct1, dct2);
-    }
-
-    #[test]
-    fn dct_2d_inequality() {
-        fn dummy_dct(_ : &[f64], _: usize) -> Vec<f64> {
-            unimplemented!();
-        }
-
-        fn dummy_dct_2(_ : &[f64], _: usize) -> Vec<f64> {
-            unimplemented!();
-        }
-
-        let dct1 = DCT2DFunc(dummy_dct);
-        let dct2 = DCT2DFunc(dummy_dct_2);
-
-        assert_ne!(dct1, dct2);
-    }
+    test_hash_type!(VertGradient, vert_gradient);
 
     #[test]
     fn size() {
         let test_img = gen_test_img(1024, 1024);
-        let hash = ImageHash::hash(&test_img, 32, HashType::Mean);
-        assert_eq!(32*32, hash.size());
+        let hasher = HasherConfig::new()
+            .hash_alg(HashAlg::Mean)
+            .hash_size(32, 32)
+            .to_hasher();
+        let hash = hasher.hash_image(&test_img);
+        assert_eq!(32 * 32 / 8, hash.as_bytes().len());
     }
 
     #[test]
     fn base64_encoding_decoding() {
         let test_img = gen_test_img(1024, 1024);
-        let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
+        let hasher = HasherConfig::new()
+            .hash_alg(HashAlg::Mean)
+            .hash_size(32, 32)
+            .to_hasher();
+        let hash1 = hasher.hash_image(&test_img);
 
         let base64_string = hash1.to_base64();
         let decoded_result = ImageHash::from_base64(&*base64_string);
 
         assert_eq!(decoded_result.unwrap(), hash1);
     }
-
-    #[test]
-    fn base64_error_on_empty() {
-        let decoded_result = ImageHash::from_base64("");
-        match decoded_result {
-            Err(InvalidBase64Length) => (),
-            _ => panic!("Expected a invalid length error")
-        };
-    }
-
-    #[cfg(feature = "bench")]
-    mod bench {
-        use super::gen_test_img;
-        use super::rand::{thread_rng, Rng};
-
-        extern crate test;
-
-        use ::{HashType, ImageHash};
-
-        use self::test::Bencher;
-
-        const BENCH_HASH_SIZE: u32 = 8;
-        const TEST_IMAGE_SIZE: u32 = 64;
-
-        fn bench_hash(b: &mut Bencher, hash_type: HashType) {
-            let test_img = gen_test_img(TEST_IMAGE_SIZE, TEST_IMAGE_SIZE);
-
-            b.iter(|| ImageHash::hash(&test_img, BENCH_HASH_SIZE, hash_type));
-        }
-
-        macro_rules! bench_hash {
-            ($bench_fn:ident : $hash_type:expr) => (
-                #[bench]
-                fn $bench_fn(b: &mut Bencher) {
-                    bench_hash(b, $hash_type);
-                }
-            )
-        }
-
-        bench_hash! { bench_mean_hash : HashType::Mean }
-        bench_hash! { bench_gradient_hash : HashType::Gradient }
-        bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
-        bench_hash! { bench_block_hash: HashType::Block }
-
-
-        #[bench]
-        fn bench_dct_hash(b: &mut Bencher) {
-            ::dct::clear_precomputed_matrix();
-            bench_hash(b, HashType::DCT);
-        }
-
-        #[bench]
-        fn bench_dct_hash_precomp(b: &mut Bencher) {
-            ::precompute_dct_matrix(BENCH_HASH_SIZE);
-            bench_hash(b, HashType::DCT);
-        }
-
-        #[bench]
-        fn bench_dct_1d(b: &mut Bencher) {
-            const ROW_LEN: usize = 8;
-            let mut test_vals = [0f64; ROW_LEN];
-
-            fill_rand(&mut test_vals);
-
-            let mut output = [0f64;  ROW_LEN];
-
-            ::dct::clear_precomputed_matrix();
-
-            // Explicit slicing is necessary
-            b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
-
-            test::black_box(&output);
-        }
-
-        #[bench]
-        fn bench_dct_1d_precomp(b: &mut Bencher) {
-            const ROW_LEN: usize = 8;
-            let mut test_vals = [0f64; ROW_LEN];
-
-            fill_rand(&mut test_vals);
-
-            let mut output = [0f64;  ROW_LEN];
-
-            ::dct::precomp_exact(ROW_LEN as u32);
-
-            // Explicit slicing is necessary
-            b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
-
-            test::black_box(&output);
-        }
-
-        #[bench]
-        fn bench_dct_2d(b: &mut Bencher) {
-            const ROWSTRIDE: usize = 8;
-            const LEN: usize = ROWSTRIDE * ROWSTRIDE;
-
-            let mut test_vals = [0f64; LEN];
-
-            fill_rand(&mut test_vals);
-
-            ::dct::clear_precomputed_matrix();
-
-            b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
-        }
-
-        #[bench]
-        fn bench_dct_2d_precomp(b: &mut Bencher) {
-            const ROWSTRIDE: usize = 8;
-            const LEN: usize = ROWSTRIDE * ROWSTRIDE;
-
-            let mut test_vals = [0f64; LEN];
-
-            fill_rand(&mut test_vals);
-
-            ::dct::precomp_exact(ROWSTRIDE as u32);
-
-            b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
-        }
-
-        #[inline(never)]
-        fn fill_rand(out: &mut [f64]) {
-            let mut rng = thread_rng();
-
-            for (val, out) in rng.gen_iter().zip(out) {
-                *out = val;
-            }
-        }
-    }
 }
-*/

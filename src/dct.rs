@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rustdct::{DctPlanner, TransformType2And3};
-use transpose::transpose;
+use transpose::transpose_inplace;
 
 pub const SIZE_MULTIPLIER: u32 = 2;
 pub const SIZE_MULTIPLIER_U: usize = SIZE_MULTIPLIER as usize;
@@ -51,22 +51,32 @@ impl DctCtxt {
         } = *self;
 
         let trunc_len = width * height;
-        assert_eq!(trunc_len * 2, packed_2d.len());
+        assert_eq!(trunc_len + self.required_scratch(), packed_2d.len());
 
         {
             let (packed_2d, scratch) = packed_2d.split_at_mut(trunc_len);
 
-            for (row_in, row_out) in packed_2d.chunks_mut(width).zip(scratch.chunks_mut(width)) {
-                row_dct.process_dct2_with_scratch(row_in, row_out);
+            for row_in in packed_2d.chunks_mut(width) {
+                row_dct.process_dct2_with_scratch(row_in, scratch);
             }
 
-            transpose(scratch, packed_2d, width, height);
+            transpose_inplace(
+                packed_2d,
+                &mut scratch[..std::cmp::max(width, height)],
+                width,
+                height,
+            );
 
-            for (row_in, row_out) in packed_2d.chunks_mut(height).zip(scratch.chunks_mut(height)) {
-                col_dct.process_dct2_with_scratch(row_in, row_out);
+            for row_in in packed_2d.chunks_mut(height) {
+                col_dct.process_dct2_with_scratch(row_in, scratch);
             }
 
-            transpose(scratch, packed_2d, width, height);
+            transpose_inplace(
+                packed_2d,
+                &mut scratch[..std::cmp::max(width, height)],
+                width,
+                height,
+            );
         }
 
         packed_2d.truncate(trunc_len);
@@ -75,6 +85,15 @@ impl DctCtxt {
 
     pub fn crop_2d(&self, packed: Vec<f32>) -> Vec<f32> {
         crop_2d_dct(packed, self.width)
+    }
+
+    pub fn required_scratch(&self) -> usize {
+        let transpose_scratch = std::cmp::max(self.width, self.height);
+        let dct_scratch = std::cmp::max(
+            self.row_dct.get_scratch_len(),
+            self.col_dct.get_scratch_len(),
+        );
+        std::cmp::max(transpose_scratch, dct_scratch)
     }
 }
 

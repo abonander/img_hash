@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate criterion;
 
-use criterion::{Bencher, Criterion, ParameterizedBenchmark, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput};
 
 static LOOKUP: [f32; 256] = [
     0.0,
@@ -274,31 +274,32 @@ static LOOKUP: [f32; 256] = [
 ];
 
 fn bench_functions(c: &mut Criterion) {
-    let ref sizes = [64usize, 128, 256, 384, 512, 768, 1024];
+    let sizes = [64usize, 128, 256, 384, 512, 768, 1024];
 
-    let bench = ParameterizedBenchmark::new(
-        "lookup",
-        move |b: &mut Bencher, &&size| {
+    let mut group = c.benchmark_group("byte to float conversion");
+
+    for size in sizes {
+        group.throughput(Throughput::Bytes(size as _));
+
+        group.bench_function(BenchmarkId::new("lookup", size), |b| {
             let vals: Vec<u8> = (0..=255).cycle().take(size).collect();
 
             b.iter_with_setup(
                 || Vec::with_capacity(size),
                 move |mut out: Vec<f32>| out.extend(vals.iter().map(|&x| LOOKUP[x as usize])),
             );
-        },
-        sizes,
-    )
-    .with_function("naive", |b: &mut Bencher, &&size| {
-        let vals: Vec<u8> = (0..=255).cycle().take(size).collect();
+        });
 
-        b.iter_with_setup(
-            || Vec::with_capacity(size),
-            |mut out| out.extend(vals.iter().map(|&x| x as f32 / 255.)),
-        );
-    })
-    .throughput(|&&size| Throughput::Bytes(size as _));
+        group.bench_function(BenchmarkId::new("naive", size), |b| {
+            let vals: Vec<u8> = (0..=255).cycle().take(size).collect();
 
-    c.bench("byte to float conversion", bench);
+            b.iter_with_setup(
+                || Vec::with_capacity(size),
+                |mut out| out.extend(vals.iter().map(|&x| x as f32 / 255.)),
+            );
+        });
+    }
+    group.finish()
 }
 
 criterion_group!(benches, bench_functions);
