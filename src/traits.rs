@@ -8,7 +8,7 @@ use image::{imageops, DynamicImage, GenericImageView, GrayImage, ImageBuffer, Pi
 /// This is implemented for `Vec<u8>`, `Box<[u8]>` and arrays that are multiples/combinations of
 /// useful x86 bytewise SIMD register widths (64, 128, 256, 512 bits).
 ///
-/// Please feel free to open a pull request [on Github](https://github.com/abonander/img_hash)
+/// Please feel free to open a pull request [on Github](https://github.com/qarmin/img_hash)
 /// if you need this implemented for a different array size.
 pub trait HashBytes {
     /// Construct this type from an iterator of bytes.

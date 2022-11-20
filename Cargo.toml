@@ -1,14 +1,14 @@
 [package]
 
 name = "image_hasher"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>", "Austin Bonander <austin.bonander@gmail.com>"]
 
 description = "A simple library that provides perceptual hashing and difference calculation for images."
 
 license = "MIT OR Apache-2.0"
 
-documentation = "http://docs.rs/imgage_hasher"
+documentation = "http://docs.rs/image_hasher"
 
 keywords = ["image", "hash", "perceptual", "difference"]
 
