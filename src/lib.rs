@@ -479,7 +479,7 @@ impl<B: HashBytes> ImageHash<B> {
     /// Create an `ImageHash` instance from the given Base64-encoded string.
     ///
     /// ## Errors:
-    /// Returns `InvaidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64`.
+    /// Returns `InvalidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64`.
     /// Otherwise returns the same errors as `from_bytes`.
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError> {
         let bytes = base64::decode(encoded_hash).map_err(InvalidBytesError::Base64)?;

@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        toolchain: [ stable ]
+        toolchain: [ stable, 1.61.0 ]
         type: [ release ]
     runs-on: ubuntu-20.04
     steps:

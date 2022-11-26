@@ -1,28 +1,23 @@
 [package]
 
 name = "image_hasher"
-version = "1.1.1"
-authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>", "Austin Bonander <austin.bonander@gmail.com>"]
-
-description = "A simple library that provides perceptual hashing and difference calculation for images."
-
+version = "1.1.2"
+rust-version = "1.61.0"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 
+authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>", "Austin Bonander <austin.bonander@gmail.com>"]
+description = "A simple library that provides perceptual hashing and difference calculation for images."
 documentation = "http://docs.rs/image_hasher"
-
 keywords = ["image", "hash", "perceptual", "difference"]
-
 repository = "http://github.com/qarmin/img_hash"
-
-edition = "2021"
-
 readme = "README.md"
 
 [features]
 nightly = []
 
 [dependencies]
-base64 = "0.20.0-alpha.1"
+base64 = "0.13.1"
 image = { version = ">=0.24,<0.25", default-features = false }
 rustdct = "0.7"
 serde = { version = "1.0", features = ["derive"] }

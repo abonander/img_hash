@@ -103,7 +103,7 @@ impl HashAlg {
         let grayscale = post_gauss.to_grayscale();
         let (resize_width, resize_height) = self.resize_dimensions(width, height);
 
-        let hash_vals = ctxt.calc_hash_vals(&*grayscale, resize_width, resize_height);
+        let hash_vals = ctxt.calc_hash_vals(&grayscale, resize_width, resize_height);
 
         let rowstride = resize_width as usize;
 
