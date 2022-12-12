@@ -28,7 +28,7 @@ image_hasher = "1.1.0"
 Example program:
 
 ```rust
- use imgage_hasher::{HasherConfig, HashAlg};
+ use image_hasher::{HasherConfig, HashAlg};
 
  fn main() {
      let image1 = image::open("image1.png").unwrap();
