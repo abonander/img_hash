@@ -12,7 +12,7 @@
 //!
 //! let hash1 = hasher.hash_image(&image1);
 //! let hash2 = hasher.hash_image(&image2);
-//!     
+//!
 //! println!("Image1 hash: {}", hash1.to_base64());
 //! println!("Image2 hash: {}", hash2.to_base64());
 //!
@@ -29,6 +29,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 
+use base64::Engine;
 use image::imageops;
 pub use image::imageops::FilterType;
 use image::GrayImage;
@@ -482,7 +483,9 @@ impl<B: HashBytes> ImageHash<B> {
     /// Returns `InvalidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64.
     /// Otherwise returns the same errors as `from_bytes`.
     pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError> {
-        let bytes = base64::decode(encoded_hash).map_err(InvalidBytesError::Base64)?;
+        let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
+            .decode(encoded_hash)
+            .map_err(InvalidBytesError::Base64)?;
 
         Self::from_bytes(&bytes)
     }
@@ -491,7 +494,7 @@ impl<B: HashBytes> ImageHash<B> {
     ///
     /// Mostly for printing convenience.
     pub fn to_base64(&self) -> String {
-        base64::encode(self.hash.as_slice())
+        base64::engine::general_purpose::STANDARD_NO_PAD.encode(self.hash.as_slice())
     }
 }
 
