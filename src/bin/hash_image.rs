@@ -18,7 +18,7 @@ fn main() -> Result<(), String> {
     let hash_str = hash
         .as_bytes()
         .iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
     println!("{}: {}", &args[1], hash_str);

@@ -177,7 +177,7 @@ fn sum_px(chans: &[u8]) -> u32 {
             }
         }
         1 => chans[0] as u32,
-        channels => panic!("Unsupported channel count in image: {}", channels),
+        channels => panic!("Unsupported channel count in image: {channels}"),
     }
 }
 
@@ -194,9 +194,7 @@ fn qselect_inplace<T: PartialOrd>(data: &mut [T], k: usize) -> &mut T {
 
     assert!(
         k < len,
-        "Called qselect_inplace with k = {} and data length: {}",
-        k,
-        len
+        "Called qselect_inplace with k = {k} and data length: {len}",
     );
 
     if len < SORT_THRESH {

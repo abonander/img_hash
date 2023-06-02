@@ -173,6 +173,7 @@ impl<B: HashBytes> HasherConfig<B> {
     ///
     /// When using DCT preprocessing having `width` and `height` be the same value will improve
     /// hashing performance as only one set of coefficients needs to be used.
+    #[must_use]
     pub fn hash_size(self, width: u32, height: u32) -> Self {
         Self {
             width,
@@ -185,6 +186,7 @@ impl<B: HashBytes> HasherConfig<B> {
     ///
     /// Note when picking a filter that images are almost always reduced in size.
     /// Has no effect with the Blockhash algorithm as it does not resize.
+    #[must_use]
     pub fn resize_filter(self, resize_filter: FilterType) -> Self {
         Self {
             resize_filter,
@@ -195,6 +197,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// Set the algorithm used to generate hashes.
     ///
     /// Each algorithm has different performance characteristics.
+    #[must_use]
     pub fn hash_alg(self, hash_alg: HashAlg) -> Self {
         Self { hash_alg, ..self }
     }
@@ -229,6 +232,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// However there is nothing to say that DCT preprocessing cannot compose with other hash
     /// algorithms; Gradient + DCT might well perform better in some aspects.
     /// * https://en.wikipedia.org/wiki/Discrete_cosine_transform
+    #[must_use]
     pub fn preproc_dct(self) -> Self {
         Self { dct: true, ..self }
     }
@@ -239,6 +243,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// as it significantly reduces entropy in the scaled down image for other algorithms.
     ///
     /// See [`Self::preproc_diff_gauss_sigmas()](#method.preproc_diff_gauss_sigmas) for more info.
+    #[must_use]
     pub fn preproc_diff_gauss(self) -> Self {
         self.preproc_diff_gauss_sigmas(5.0, 10.0)
     }
@@ -257,6 +262,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// * https://en.wikipedia.org/wiki/Difference_of_Gaussians
     /// * http://homepages.inf.ed.ac.uk/rbf/HIPR2/log.htm
     /// (Difference of Gaussians is an approximation of a Laplacian of Gaussian filter)
+    #[must_use]
     pub fn preproc_diff_gauss_sigmas(self, sigma_a: f32, sigma_b: f32) -> Self {
         Self {
             gauss_sigmas: Some([sigma_a, sigma_b]),
@@ -284,9 +290,7 @@ impl<B: HashBytes> HasherConfig<B> {
 
         assert!(
             (width * height) as usize <= B::max_bits(),
-            "hash size too large for container: {} x {}",
-            width,
-            height
+            "hash size too large for container: {width} x {height}",
         );
 
         // Blockhash doesn't resize the image so don't waste time calculating coefficients

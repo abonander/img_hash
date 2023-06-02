@@ -195,7 +195,7 @@ where
         F: FnMut(u32, u32, &[u8]),
     {
         self.enumerate_pixels()
-            .for_each(|(x, y, px)| foreach(x, y, px.channels()))
+            .for_each(|(x, y, px)| foreach(x, y, px.channels()));
     }
 }
 
@@ -252,7 +252,7 @@ impl Image for DynamicImage {
         F: FnMut(u32, u32, &[u8]),
     {
         self.pixels()
-            .for_each(|(x, y, px)| foreach(x, y, px.channels()))
+            .for_each(|(x, y, px)| foreach(x, y, px.channels()));
     }
 }
 

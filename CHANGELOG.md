@@ -1,3 +1,5 @@
+# 1.2.0 - 02.06.2023
+- Update base64 to 0.21.0 - [#8](https://github.com/qarmin/img_hash/pull/8)
 # 1.1.2 - 26.11.2022
 - Revert base64 version to 0.13.1
 - Set minimal Rust version to 1.61

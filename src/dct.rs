@@ -107,8 +107,7 @@ fn crop_2d_dct<T: Copy>(mut packed: Vec<T>, rowstride: usize) -> Vec<T> {
     assert_eq!(rowstride % SIZE_MULTIPLIER_U, 0);
     assert!(
         rowstride / SIZE_MULTIPLIER_U > 0,
-        "rowstride cannot be cropped: {}",
-        rowstride
+        "rowstride cannot be cropped: {rowstride}",
     );
 
     let new_rowstride = rowstride / SIZE_MULTIPLIER_U;
