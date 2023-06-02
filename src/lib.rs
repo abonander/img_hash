@@ -539,7 +539,7 @@ mod test {
             buf.set_len(len);
         } // We immediately fill the buffer.
         let mut rng = SmallRng::seed_from_u64(0xc0ffee);
-        rng.fill_bytes(&mut *buf);
+        rng.fill_bytes(&mut buf);
 
         ImageBuffer::from_raw(width, height, buf).unwrap()
     }
