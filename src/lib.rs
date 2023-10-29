@@ -500,6 +500,12 @@ impl<B: HashBytes> ImageHash<B> {
     pub fn to_base64(&self) -> String {
         base64::engine::general_purpose::STANDARD_NO_PAD.encode(self.hash.as_slice())
     }
+
+    /// Unwraps this `ImageHash` into its inner bytes.
+    /// This is useful if you want to move ownership of the bytes to a new struct.
+    pub fn into_inner(self) -> B {
+        self.hash
+    }
 }
 
 /// Provide Serde a typedef for `image::FilterType`: https://serde.rs/remote-derive.html
