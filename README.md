@@ -12,8 +12,9 @@ This crate can operate directly on buffers from the [PistonDevelopers/image][1] 
 
 [1]: https://github.com/PistonDevelopers/image
 
-This is fork of [img_hash](https://github.com/abonander/img_hash) library, but with updated dependencies without any
-license changes.
+This is fork of [img_hash](https://github.com/abonander/img_hash) library, but with updated dependencies.
+
+I am not familiar with this library, so if you have a need/willingness to develop it, I can add you as a co-maintainer.
 
 Usage
 =====
@@ -22,7 +23,7 @@ Usage
 Add `image_hasher` to your `Cargo.toml`:
 
 ```
-image_hasher = "1.1.0"
+image_hasher = "2.0.0"
 ```
 
 Example program:

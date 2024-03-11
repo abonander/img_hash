@@ -1,3 +1,9 @@
+# 2.0.0 - 11.03.2024
+- Update to image 0.25
+- Minimal Rust version set to 1.67.1
+- Added median hash - [#13](https://github.com/qarmin/img_hash/pull/13)
+- Added bit ordering - [#14](https://github.com/qarmin/img_hash/pull/14)
+- Added into_inner() function on ImageHash object - [#11](https://github.com/qarmin/img_hash/pull/11)
 # 1.2.0 - 02.06.2023
 - Update base64 to 0.21.0 - [#8](https://github.com/qarmin/img_hash/pull/8)
 # 1.1.2 - 26.11.2022

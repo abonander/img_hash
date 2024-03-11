@@ -284,10 +284,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// hash 1011 0100 (0xB4)
     #[must_use]
     pub fn bit_order(self, bit_order: BitOrder) -> Self {
-        Self {
-            bit_order: bit_order,
-            ..self
-        }
+        Self { bit_order, ..self }
     }
 
     /// Create a [`Hasher`](struct.Hasher.html) from this config which can be used to hash images.

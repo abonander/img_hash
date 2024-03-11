@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_closure_call)]
+
 use std::cmp::Ordering;
 use std::mem;
 use std::ops::AddAssign;

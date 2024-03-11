@@ -156,8 +156,8 @@ impl HashAlg {
             (DoubleGradient, Bytes(ref bytes)) => {
                 B::from_bools(double_gradient_hash(bytes, rowstride), bit_order)
             }
-            (Median, Floats(ref floats)) => B::from_bools(median_hash_f32(floats)),
-            (Median, Bytes(ref bytes)) => B::from_bools(median_hash_u8(bytes)),
+            (Median, Floats(ref floats)) => B::from_bools(median_hash_f32(floats), bit_order),
+            (Median, Bytes(ref bytes)) => B::from_bools(median_hash_u8(bytes), bit_order),
             (Blockhash, _) => unreachable!(),
         }
     }

@@ -1,8 +1,8 @@
 [package]
 
 name = "image_hasher"
-version = "1.2.0"
-rust-version = "1.61.0"
+version = "2.0.0"
+rust-version = "1.67.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -17,14 +17,14 @@ readme = "README.md"
 nightly = []
 
 [dependencies]
-base64 = "0.21.0"
-image = { version = ">=0.24,<0.25", default-features = false }
+base64 = "0.22.0"
+image = { version = ">=0.25,<0.26", default-features = false }
 rustdct = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.2"
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 rand = { version = "0.8", features = ["small_rng"] }
 
 [[bench]]

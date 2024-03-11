@@ -15,6 +15,7 @@ fn main() -> Result<(), String> {
         .to_hasher()
         .hash_image(&image);
 
+    #[allow(clippy::format_collect)]
     let hash_str = hash
         .as_bytes()
         .iter()
