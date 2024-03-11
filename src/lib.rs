@@ -35,6 +35,7 @@ pub use image::imageops::FilterType;
 use image::GrayImage;
 use serde::{Deserialize, Serialize};
 
+pub use alg::BitOrder;
 pub use alg::HashAlg;
 use dct::DctCtxt;
 pub(crate) use traits::BitSet;
@@ -114,6 +115,7 @@ pub struct HasherConfig<B = Box<[u8]>> {
     resize_filter: FilterType,
     dct: bool,
     hash_alg: HashAlg,
+    bit_order: BitOrder,
     _bytes_type: PhantomData<B>,
 }
 
@@ -141,6 +143,7 @@ impl HasherConfig<Box<[u8]>> {
             resize_filter: FilterType::Lanczos3,
             dct: false,
             hash_alg: HashAlg::Gradient,
+            bit_order: BitOrder::LsbFirst,
             _bytes_type: PhantomData,
         }
     }
@@ -270,6 +273,23 @@ impl<B: HashBytes> HasherConfig<B> {
         }
     }
 
+    /// Change the bit order of the resulting hash.
+    ///
+    /// After the image has been turned into a series of bits using the [`hash_alg`](#method.hash_alg)
+    /// this series of bits has to be turned into a hash. There are two major ways this can be done.
+    /// This library defaults to `BitOrder::LsbFirst`, meaning the first bit of the hash algo's output
+    /// forms the least significant bit of the first byte of the hash. This means a hash alog output of
+    /// 1011 0100 results in a hash of 0010 1101 (or 0x2E). For compatability with hashes created by
+    /// other libraries there is the option to instead use `BitOrder::MsbFirst`, which would creat the
+    /// hash 1011 0100 (0xB4)
+    #[must_use]
+    pub fn bit_order(self, bit_order: BitOrder) -> Self {
+        Self {
+            bit_order: bit_order,
+            ..self
+        }
+    }
+
     /// Create a [`Hasher`](struct.Hasher.html) from this config which can be used to hash images.
     ///
     /// ### Panics
@@ -283,6 +303,7 @@ impl<B: HashBytes> HasherConfig<B> {
             gauss_sigmas,
             resize_filter,
             dct,
+            bit_order,
             ..
         } = *self;
 
@@ -309,6 +330,7 @@ impl<B: HashBytes> HasherConfig<B> {
                 width,
                 height,
                 resize_filter,
+                bit_order,
             },
             hash_alg,
             bytes_type: PhantomData,
@@ -326,6 +348,7 @@ impl<B> fmt::Debug for HasherConfig<B> {
             .field("resize_filter", &debug_filter_type(&self.resize_filter))
             .field("gauss_sigmas", &self.gauss_sigmas)
             .field("use_dct", &self.dct)
+            .field("bit_order", &self.bit_order)
             .finish()
     }
 }
@@ -377,6 +400,7 @@ struct HashCtxt {
     gauss_sigmas: Option<[f32; 2]>,
     dct_ctxt: Option<DctCtxt>,
     resize_filter: FilterType,
+    bit_order: BitOrder,
     width: u32,
     height: u32,
 }

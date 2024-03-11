@@ -84,6 +84,20 @@ pub enum HashAlg {
     Blockhash,
 }
 
+/// The bit order used when forming the bit string of the hash
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy)]
+pub enum BitOrder {
+    /// Least Significant Bit First. This turns a filter output of 1000 000 into the hash 0x01
+    ///
+    /// This is the traditional mode of this library
+    LsbFirst,
+
+    /// Most Significant Bit First. This turns a filter output of 1000 000 into the hash 0x80
+    ///
+    /// This mode is popular among other libraries, and thus useful to generate hashes compatible with them
+    MsbFirst,
+}
+
 fn next_multiple_of_2(x: u32) -> u32 {
     (x + 1) & !1
 }
@@ -100,12 +114,17 @@ impl HashAlg {
     {
         let post_gauss = ctxt.gauss_preproc(image);
 
-        let HashCtxt { width, height, .. } = *ctxt;
+        let HashCtxt {
+            width,
+            height,
+            bit_order,
+            ..
+        } = *ctxt;
 
         if *self == Blockhash {
             return match post_gauss {
-                Borrowed(img) => blockhash::blockhash(img, width, height),
-                Owned(img) => blockhash::blockhash(&img, width, height),
+                Borrowed(img) => blockhash::blockhash(img, width, height, bit_order),
+                Owned(img) => blockhash::blockhash(&img, width, height, bit_order),
             };
         }
 
@@ -117,19 +136,25 @@ impl HashAlg {
         let rowstride = resize_width as usize;
 
         match (*self, hash_vals) {
-            (Mean, Floats(ref floats)) => B::from_bools(mean_hash_f32(floats)),
-            (Mean, Bytes(ref bytes)) => B::from_bools(mean_hash_u8(bytes)),
-            (Gradient, Floats(ref floats)) => B::from_bools(gradient_hash(floats, rowstride)),
-            (Gradient, Bytes(ref bytes)) => B::from_bools(gradient_hash(bytes, rowstride)),
-            (VertGradient, Floats(ref floats)) => {
-                B::from_bools(vert_gradient_hash(floats, rowstride))
+            (Mean, Floats(ref floats)) => B::from_bools(mean_hash_f32(floats), bit_order),
+            (Mean, Bytes(ref bytes)) => B::from_bools(mean_hash_u8(bytes), bit_order),
+            (Gradient, Floats(ref floats)) => {
+                B::from_bools(gradient_hash(floats, rowstride), bit_order)
             }
-            (VertGradient, Bytes(ref bytes)) => B::from_bools(vert_gradient_hash(bytes, rowstride)),
+            (Gradient, Bytes(ref bytes)) => {
+                B::from_bools(gradient_hash(bytes, rowstride), bit_order)
+            }
+            (VertGradient, Floats(ref floats)) => {
+                B::from_bools(vert_gradient_hash(floats, rowstride), bit_order)
+            }
+            (VertGradient, Bytes(ref bytes)) => {
+                B::from_bools(vert_gradient_hash(bytes, rowstride), bit_order)
+            }
             (DoubleGradient, Floats(ref floats)) => {
-                B::from_bools(double_gradient_hash(floats, rowstride))
+                B::from_bools(double_gradient_hash(floats, rowstride), bit_order)
             }
             (DoubleGradient, Bytes(ref bytes)) => {
-                B::from_bools(double_gradient_hash(bytes, rowstride))
+                B::from_bools(double_gradient_hash(bytes, rowstride), bit_order)
             }
             (Median, Floats(ref floats)) => B::from_bools(median_hash_f32(floats)),
             (Median, Bytes(ref bytes)) => B::from_bools(median_hash_u8(bytes)),

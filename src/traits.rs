@@ -3,6 +3,8 @@ use std::ops;
 
 use image::{imageops, DynamicImage, GenericImageView, GrayImage, ImageBuffer, Pixel};
 
+use crate::BitOrder;
+
 /// Interface for types used for storing hash data.
 ///
 /// This is implemented for `Vec<u8>`, `Box<[u8]>` and arrays that are multiples/combinations of
@@ -86,6 +88,7 @@ hash_bytes_array!(8, 16, 24, 32, 40, 48, 56, 64);
 
 struct BoolsToBytes<I> {
     iter: I,
+    bit_order: BitOrder,
 }
 
 impl<I> Iterator for BoolsToBytes<I>
@@ -95,14 +98,30 @@ where
     type Item = u8;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
-        // starts at the LSB and works up
-        self.iter
-            .by_ref()
-            .take(8)
-            .enumerate()
-            .fold(None, |accum, (n, val)| {
-                accum.or(Some(0)).map(|accum| accum | ((val as u8) << n))
-            })
+        match self.bit_order {
+            BitOrder::LsbFirst => {
+                // starts at the LSB and works up
+                self.iter
+                    .by_ref()
+                    .take(8)
+                    .enumerate()
+                    .fold(None, |accum, (n, val)| {
+                        accum.or(Some(0)).map(|accum| accum | ((val as u8) << n))
+                    })
+            }
+            BitOrder::MsbFirst => {
+                // starts at the MSB and works down
+                self.iter
+                    .by_ref()
+                    .take(8)
+                    .enumerate()
+                    .fold(None, |accum, (n, val)| {
+                        accum
+                            .or(Some(0))
+                            .map(|accum| accum | ((val as u8) << (7 - n)))
+                    })
+            }
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -122,11 +141,11 @@ where
 }
 
 pub(crate) trait BitSet: HashBytes {
-    fn from_bools<I: Iterator<Item = bool>>(iter: I) -> Self
+    fn from_bools<I: Iterator<Item = bool>>(iter: I, bit_order: BitOrder) -> Self
     where
         Self: Sized,
     {
-        Self::from_iter(BoolsToBytes { iter })
+        Self::from_iter(BoolsToBytes { iter, bit_order })
     }
 
     fn hamming(&self, other: &Self) -> u32 {
@@ -269,9 +288,22 @@ impl Image for GrayImage {
 #[test]
 fn test_bools_to_bytes() {
     let bools = (0..16).map(|x| x & 1 == 0);
-    let bytes = Vec::from_bools(bools.clone());
+    let bytes = Vec::from_bools(bools.clone(), BitOrder::LsbFirst);
     assert_eq!(*bytes, [0b01010101; 2]);
 
-    let bools_to_bytes = BoolsToBytes { iter: bools };
+    let bools_to_bytes = BoolsToBytes {
+        iter: bools,
+        bit_order: BitOrder::LsbFirst,
+    };
     assert_eq!(bools_to_bytes.size_hint(), (2, Some(2)));
+}
+
+#[test]
+fn test_bit_order() {
+    let bools = (0..16).map(|x| x % 3 == 0);
+    let bytes_lsb = Vec::from_bools(bools.clone(), BitOrder::LsbFirst);
+    assert_eq!(*bytes_lsb, [0b01001001, 0b10010010]);
+
+    let bytes_msb = Vec::from_bools(bools.clone(), BitOrder::MsbFirst);
+    assert_eq!(*bytes_msb, [0b10010010, 0b01001001]);
 }

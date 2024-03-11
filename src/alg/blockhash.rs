@@ -10,9 +10,16 @@ use image::{GenericImageView, Pixel};
 use crate::BitSet;
 use crate::{HashBytes, Image};
 
+use crate::BitOrder;
+
 const FLOAT_EQ_MARGIN: f32 = 0.001;
 
-pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B {
+pub fn blockhash<I: Image, B: HashBytes>(
+    img: &I,
+    width: u32,
+    height: u32,
+    bit_order: BitOrder,
+) -> B {
     assert_eq!(width % 4, 0, "width must be multiple of 4");
     assert_eq!(height % 4, 0, "height must be multiple of 4");
 
@@ -20,14 +27,14 @@ pub fn blockhash<I: Image, B: HashBytes>(img: &I, width: u32, height: u32) -> B 
 
     // Skip the floating point math if it's unnecessary
     if iwidth % width == 0 && iheight % height == 0 {
-        blockhash_fast(img, width, height)
+        blockhash_fast(img, width, height, bit_order)
     } else {
-        blockhash_slow(img, width, height)
+        blockhash_slow(img, width, height, bit_order)
     }
 }
 
 macro_rules! gen_hash {
-    ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr) => {{
+    ($imgty:ty, $valty:ty, $blocks: expr, $width:expr, $block_width:expr, $block_height:expr, $eq_fn:expr, $bit_order:expr) => {{
         #[allow(deprecated)] // deprecated as of 0.22
         let channel_count = <<$imgty as GenericImageView>::Pixel as Pixel>::CHANNEL_COUNT as u32;
 
@@ -53,6 +60,7 @@ macro_rules! gen_hash {
                         block > median || ($eq_fn(block, median) && median > cmp_factor)
                     })
                 }),
+            $bit_order,
         )
     }};
 }
@@ -64,7 +72,12 @@ fn block_adder<'a, T: AddAssign + 'a>(
     move |x, y, add| (blocks[(y as usize) * (width as usize) + (x as usize)] += add)
 }
 
-fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) -> B {
+fn blockhash_slow<I: Image, B: HashBytes>(
+    img: &I,
+    hwidth: u32,
+    hheight: u32,
+    bit_order: BitOrder,
+) -> B {
     let mut blocks = vec![0f32; (hwidth * hheight) as usize];
 
     let (iwidth, iheight) = img.dimensions();
@@ -132,11 +145,17 @@ fn blockhash_slow<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         hwidth,
         block_width,
         block_height,
-        |l: f32, r: f32| (l - r).abs() < FLOAT_EQ_MARGIN
+        |l: f32, r: f32| (l - r).abs() < FLOAT_EQ_MARGIN,
+        bit_order
     )
 }
 
-fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) -> B {
+fn blockhash_fast<I: Image, B: HashBytes>(
+    img: &I,
+    hwidth: u32,
+    hheight: u32,
+    bit_order: BitOrder,
+) -> B {
     let mut blocks = vec![0u32; (hwidth * hheight) as usize];
     let (iwidth, iheight) = img.dimensions();
 
@@ -153,8 +172,16 @@ fn blockhash_fast<I: Image, B: HashBytes>(img: &I, hwidth: u32, hheight: u32) ->
         add_to_block(block_x, block_y, px_sum);
     });
 
-    gen_hash!(I, u32, blocks, hwidth, block_width, block_height, |l, r| l
-        == r)
+    gen_hash!(
+        I,
+        u32,
+        blocks,
+        hwidth,
+        block_width,
+        block_height,
+        |l, r| l == r,
+        bit_order
+    )
 }
 
 #[inline(always)]
