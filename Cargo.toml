@@ -1,38 +1,38 @@
 [package]
 
-name = "img_hash"
-version = "3.2.0"
-authors = ["Austin Bonander <austin.bonander@gmail.com>"]
-
-description = "A simple library that provides perceptual hashing and difference calculation for images."
-
+name = "image_hasher"
+version = "2.0.0"
+rust-version = "1.67.1"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 
-documentation = "http://docs.rs/img_hash"
-
+authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>", "Austin Bonander <austin.bonander@gmail.com>"]
+description = "A simple library that provides perceptual hashing and difference calculation for images."
+documentation = "http://docs.rs/image_hasher"
 keywords = ["image", "hash", "perceptual", "difference"]
-
-repository = "http://github.com/abonander/img_hash"
-
-edition = "2015"
-
+repository = "http://github.com/qarmin/img_hash"
 readme = "README.md"
 
 [features]
 nightly = []
 
 [dependencies]
-base64 = ">=0.10,<0.14"
-image = { version = ">=0.21,<0.24", default-features = false }
-rustdct = "0.4"
+base64 = "0.22.0"
+image = { version = ">=0.25,<0.26", default-features = false }
+rustdct = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 transpose = "0.2"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5"
+rand = { version = "0.8", features = ["small_rng"] }
 
 [[bench]]
 name = "byte_to_float"
+harness = false
+
+[[bench]]
+name = "hash"
 harness = false
 
 [[bin]]

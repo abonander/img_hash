@@ -2,62 +2,49 @@
 //! Supports images opened with the [image] crate from Piston.
 //!
 //! ```rust,no_run
-//! extern crate image;
-//! extern crate img_hash;
-//! 
-//! use img_hash::{HasherConfig, HashAlg};
 //!
-//! fn main() {
-//!     let image1 = image::open("image1.png").unwrap();
-//!     let image2 = image::open("image2.png").unwrap();
-//!     
-//!     let hasher = HasherConfig::new().to_hasher();
+//! use image_hasher::{HasherConfig, HashAlg};
 //!
-//!     let hash1 = hasher.hash_image(&image1);
-//!     let hash2 = hasher.hash_image(&image2);
-//!     
-//!     println!("Image1 hash: {}", hash1.to_base64());
-//!     println!("Image2 hash: {}", hash2.to_base64());
-//!     
-//!     println!("Hamming Distance: {}", hash1.dist(&hash2));
-//! }
+//! let image1 = image::open("image1.png").unwrap();
+//! let image2 = image::open("image2.png").unwrap();
+//!
+//! let hasher = HasherConfig::new().to_hasher();
+//!
+//! let hash1 = hasher.hash_image(&image1);
+//! let hash2 = hasher.hash_image(&image2);
+//!
+//! println!("Image1 hash: {}", hash1.to_base64());
+//! println!("Image2 hash: {}", hash2.to_base64());
+//!
+//! println!("Hamming Distance: {}", hash1.dist(&hash2));
 //! ```
 //! [image]: https://github.com/PistonDevelopers/image
 #![deny(missing_docs)]
 #![cfg_attr(feature = "nightly", feature(specialization))]
 
-extern crate base64;
-
 #[macro_use]
 extern crate serde;
-
-pub extern crate image;
-
-extern crate rustdct;
-extern crate transpose;
-
-use serde::{Serialize, Deserialize};
-
-use image::{GrayImage};
-use image::imageops;
-
-pub use image::imageops::FilterType;
 
 use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 
-mod dct;
+use base64::Engine;
+use image::imageops;
+pub use image::imageops::FilterType;
+use image::GrayImage;
+use serde::{Deserialize, Serialize};
 
+pub use alg::BitOrder;
+pub use alg::HashAlg;
 use dct::DctCtxt;
+pub(crate) use traits::BitSet;
+pub use traits::{DiffImage, HashBytes, Image};
+
+mod dct;
 
 mod alg;
 mod traits;
-
-pub use alg::HashAlg;
-
-pub use traits::{HashBytes, Image, DiffImage};
-pub(crate) use traits::BitSet;
 
 /// **Start here**. Configuration builder for [`Hasher`](::Hasher).
 ///
@@ -68,7 +55,7 @@ pub(crate) use traits::BitSet;
 /// you just want to start hashing images and don't care about the details, it's as simple as:
 ///
 /// ```rust
-/// use img_hash::HasherConfig;
+/// use image_hasher::HasherConfig;
 ///
 /// let hasher = HasherConfig::new().to_hasher();
 /// // hasher.hash_image(image);
@@ -110,7 +97,7 @@ pub(crate) use traits::BitSet;
 /// produce more optimal code for generating and comparing hashes.
 ///
 /// ```rust
-/// # use img_hash::*;
+/// # use image_hasher::*;
 ///
 /// // Use default container type, good for any hash size
 /// let config = HasherConfig::new();
@@ -128,6 +115,7 @@ pub struct HasherConfig<B = Box<[u8]>> {
     resize_filter: FilterType,
     dct: bool,
     hash_alg: HashAlg,
+    bit_order: BitOrder,
     _bytes_type: PhantomData<B>,
 }
 
@@ -155,8 +143,15 @@ impl HasherConfig<Box<[u8]>> {
             resize_filter: FilterType::Lanczos3,
             dct: false,
             hash_alg: HashAlg::Gradient,
+            bit_order: BitOrder::LsbFirst,
             _bytes_type: PhantomData,
         }
+    }
+}
+
+impl Default for HasherConfig<Box<[u8]>> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -181,21 +176,31 @@ impl<B: HashBytes> HasherConfig<B> {
     ///
     /// When using DCT preprocessing having `width` and `height` be the same value will improve
     /// hashing performance as only one set of coefficients needs to be used.
+    #[must_use]
     pub fn hash_size(self, width: u32, height: u32) -> Self {
-        Self { width, height, ..self  }
+        Self {
+            width,
+            height,
+            ..self
+        }
     }
 
     /// Set the filter used to resize images during hashing.
     ///
     /// Note when picking a filter that images are almost always reduced in size.
     /// Has no effect with the Blockhash algorithm as it does not resize.
+    #[must_use]
     pub fn resize_filter(self, resize_filter: FilterType) -> Self {
-        Self { resize_filter, ..self }
+        Self {
+            resize_filter,
+            ..self
+        }
     }
 
     /// Set the algorithm used to generate hashes.
     ///
     /// Each algorithm has different performance characteristics.
+    #[must_use]
     pub fn hash_alg(self, hash_alg: HashAlg) -> Self {
         Self { hash_alg, ..self }
     }
@@ -230,6 +235,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// However there is nothing to say that DCT preprocessing cannot compose with other hash
     /// algorithms; Gradient + DCT might well perform better in some aspects.
     /// * https://en.wikipedia.org/wiki/Discrete_cosine_transform
+    #[must_use]
     pub fn preproc_dct(self) -> Self {
         Self { dct: true, ..self }
     }
@@ -240,6 +246,7 @@ impl<B: HashBytes> HasherConfig<B> {
     /// as it significantly reduces entropy in the scaled down image for other algorithms.
     ///
     /// See [`Self::preproc_diff_gauss_sigmas()](#method.preproc_diff_gauss_sigmas) for more info.
+    #[must_use]
     pub fn preproc_diff_gauss(self) -> Self {
         self.preproc_diff_gauss_sigmas(5.0, 10.0)
     }
@@ -258,8 +265,26 @@ impl<B: HashBytes> HasherConfig<B> {
     /// * https://en.wikipedia.org/wiki/Difference_of_Gaussians
     /// * http://homepages.inf.ed.ac.uk/rbf/HIPR2/log.htm
     /// (Difference of Gaussians is an approximation of a Laplacian of Gaussian filter)
+    #[must_use]
     pub fn preproc_diff_gauss_sigmas(self, sigma_a: f32, sigma_b: f32) -> Self {
-        Self { gauss_sigmas: Some([sigma_a, sigma_b]), ..self }
+        Self {
+            gauss_sigmas: Some([sigma_a, sigma_b]),
+            ..self
+        }
+    }
+
+    /// Change the bit order of the resulting hash.
+    ///
+    /// After the image has been turned into a series of bits using the [`hash_alg`](#method.hash_alg)
+    /// this series of bits has to be turned into a hash. There are two major ways this can be done.
+    /// This library defaults to `BitOrder::LsbFirst`, meaning the first bit of the hash algo's output
+    /// forms the least significant bit of the first byte of the hash. This means a hash alog output of
+    /// 1011 0100 results in a hash of 0010 1101 (or 0x2E). For compatability with hashes created by
+    /// other libraries there is the option to instead use `BitOrder::MsbFirst`, which would creat the
+    /// hash 1011 0100 (0xB4)
+    #[must_use]
+    pub fn bit_order(self, bit_order: BitOrder) -> Self {
+        Self { bit_order, ..self }
     }
 
     /// Create a [`Hasher`](struct.Hasher.html) from this config which can be used to hash images.
@@ -268,12 +293,23 @@ impl<B: HashBytes> HasherConfig<B> {
     /// If the chosen hash size (`width x height`, rounded for the algorithm if necessary)
     /// is too large for the chosen container type (`B::max_bits()`).
     pub fn to_hasher(&self) -> Hasher<B> {
-        let Self { hash_alg, width, height, gauss_sigmas, resize_filter, dct, .. } = *self;
+        let Self {
+            hash_alg,
+            width,
+            height,
+            gauss_sigmas,
+            resize_filter,
+            dct,
+            bit_order,
+            ..
+        } = *self;
 
         let (width, height) = hash_alg.round_hash_size(width, height);
 
-        assert!((width * height) as usize <= B::max_bits(),
-                "hash size too large for container: {} x {}", width, height);
+        assert!(
+            (width * height) as usize <= B::max_bits(),
+            "hash size too large for container: {width} x {height}",
+        );
 
         // Blockhash doesn't resize the image so don't waste time calculating coefficients
         let dct_coeffs = if dct && hash_alg != HashAlg::Blockhash {
@@ -287,12 +323,15 @@ impl<B: HashBytes> HasherConfig<B> {
         Hasher {
             ctxt: HashCtxt {
                 gauss_sigmas,
-                dct_ctxt: dct_coeffs, width, height, resize_filter,
+                dct_ctxt: dct_coeffs,
+                width,
+                height,
+                resize_filter,
+                bit_order,
             },
             hash_alg,
-            bytes_type: PhantomData
+            bytes_type: PhantomData,
         }
-
     }
 }
 
@@ -306,6 +345,7 @@ impl<B> fmt::Debug for HasherConfig<B> {
             .field("resize_filter", &debug_filter_type(&self.resize_filter))
             .field("gauss_sigmas", &self.gauss_sigmas)
             .field("use_dct", &self.dct)
+            .field("bit_order", &self.bit_order)
             .finish()
     }
 }
@@ -319,11 +359,17 @@ pub struct Hasher<B = Box<[u8]>> {
     bytes_type: PhantomData<B>,
 }
 
-impl<B> Hasher<B> where B: HashBytes {
+impl<B> Hasher<B>
+where
+    B: HashBytes,
+{
     /// Calculate a hash for the given image with the configured options.
     pub fn hash_image<I: Image>(&self, img: &I) -> ImageHash<B> {
         let hash = self.hash_alg.hash_image(&self.ctxt, img);
-        ImageHash { hash, __backcompat: () }
+        ImageHash {
+            hash,
+            __backcompat: (),
+        }
     }
 }
 
@@ -335,7 +381,7 @@ enum CowImage<'a, I: Image> {
 impl<'a, I: Image> CowImage<'a, I> {
     fn to_grayscale(&self) -> Cow<GrayImage> {
         match *self {
-            CowImage::Borrowed(ref img) => img.to_grayscale(),
+            CowImage::Borrowed(img) => img.to_grayscale(),
             CowImage::Owned(ref img) => img.to_grayscale(),
         }
     }
@@ -351,6 +397,7 @@ struct HashCtxt {
     gauss_sigmas: Option<[f32; 2]>,
     dct_ctxt: Option<DctCtxt>,
     resize_filter: FilterType,
+    bit_order: BitOrder,
     width: u32,
     height: u32,
 }
@@ -372,11 +419,11 @@ impl HashCtxt {
     /// If DCT preprocessing is configured, produce a vector of floats, otherwise a vector of bytes.
     fn calc_hash_vals(&self, img: &GrayImage, width: u32, height: u32) -> HashVals {
         if let Some(ref dct_ctxt) = self.dct_ctxt {
-            let img = imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(),
-                                       self.resize_filter);
+            let img =
+                imageops::resize(img, dct_ctxt.width(), dct_ctxt.height(), self.resize_filter);
 
-            let img_vals  = img.into_vec();
-            let input_len = img_vals.len() * 2;
+            let img_vals = img.into_vec();
+            let input_len = img_vals.len() + dct_ctxt.required_scratch();
 
             let mut vals_with_scratch = Vec::with_capacity(input_len);
 
@@ -405,7 +452,7 @@ pub struct ImageHash<B = Box<[u8]>> {
 }
 
 /// Error that can happen constructing a `ImageHash` from bytes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum InvalidBytesError {
     /// Byte slice passed to `from_bytes` was the wrong length.
     BytesWrongLength {
@@ -415,12 +462,14 @@ pub enum InvalidBytesError {
         found: usize,
     },
     /// String passed was not valid base64.
-    Base64(base64::DecodeError)
+    Base64(base64::DecodeError),
 }
 
 impl<B: HashBytes> ImageHash<B> {
     /// Get the bytes of this hash.
-    pub fn as_bytes(&self) -> &[u8] { self.hash.as_slice() }
+    pub fn as_bytes(&self) -> &[u8] {
+        self.hash.as_slice()
+    }
 
     /// Create an `ImageHash` instance from the given bytes.
     ///
@@ -443,7 +492,7 @@ impl<B: HashBytes> ImageHash<B> {
     /// Calculate the Hamming distance between this and `other`.
     ///
     /// Equivalent to counting the 1-bits of the XOR of the two hashes.
-    /// 
+    ///
     /// Essential to determining the perceived difference between `self` and `other`.
     ///
     /// ### Note
@@ -456,10 +505,12 @@ impl<B: HashBytes> ImageHash<B> {
     /// Create an `ImageHash` instance from the given Base64-encoded string.
     ///
     /// ## Errors:
-    /// Returns `InvaidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64`.
+    /// Returns `InvalidBytesError::Base64(DecodeError::InvalidLength)` if the string wasn't valid base64.
     /// Otherwise returns the same errors as `from_bytes`.
-    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError>{
-        let bytes = base64::decode(encoded_hash).map_err(InvalidBytesError::Base64)?;
+    pub fn from_base64(encoded_hash: &str) -> Result<ImageHash<B>, InvalidBytesError> {
+        let bytes = base64::engine::general_purpose::STANDARD_NO_PAD
+            .decode(encoded_hash)
+            .map_err(InvalidBytesError::Base64)?;
 
         Self::from_bytes(&bytes)
     }
@@ -468,7 +519,13 @@ impl<B: HashBytes> ImageHash<B> {
     ///
     /// Mostly for printing convenience.
     pub fn to_base64(&self) -> String {
-        base64::encode(self.hash.as_slice())
+        base64::engine::general_purpose::STANDARD_NO_PAD.encode(self.hash.as_slice())
+    }
+
+    /// Unwraps this `ImageHash` into its inner bytes.
+    /// This is useful if you want to move ownership of the bytes to a new struct.
+    pub fn into_inner(self) -> B {
+        self.hash
     }
 }
 
@@ -496,48 +553,57 @@ fn debug_filter_type(ft: &FilterType) -> &'static str {
     }
 }
 
-/*
 #[cfg(test)]
 mod test {
-    extern crate rand;
+    use image::{ImageBuffer, Rgba};
 
-    use serialize::base64::*;
+    use rand::{rngs::SmallRng, RngCore, SeedableRng};
 
-    use image::{Rgba, ImageBuffer};
-
-    use self::rand::{weak_rng, Rng};
-
-    use super::{DCT2DFunc, HashType, ImageHash};
+    use super::{HashAlg, HasherConfig, ImageHash};
 
     type RgbaBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
     fn gen_test_img(width: u32, height: u32) -> RgbaBuf {
         let len = (width * height * 4) as usize;
         let mut buf = Vec::with_capacity(len);
-        unsafe { buf.set_len(len); } // We immediately fill the buffer.
-        weak_rng().fill_bytes(&mut *buf);
+        unsafe {
+            buf.set_len(len);
+        } // We immediately fill the buffer.
+        let mut rng = SmallRng::seed_from_u64(0xc0ffee);
+        rng.fill_bytes(&mut buf);
 
         ImageBuffer::from_raw(width, height, buf).unwrap()
     }
 
     macro_rules! test_hash_equality {
-        ($fnname:ident, $size:expr, $type:ident) => {
+        ($fnname:ident, $size:expr, $type:ident, $preproc_dct:expr) => {
             #[test]
             fn $fnname() {
                 // square, powers of two
-                test_hash_equality!(1024, 1024, $size, $type);
+                test_hash_equality!(1024, 1024, $size, $type, $preproc_dct);
                 // rectangular, powers of two
-                test_hash_equality!(512, 256, $size, $type);
+                test_hash_equality!(512, 256, $size, $type, $preproc_dct);
                 // odd size, square
-                test_hash_equality!(967, 967, $size, $type);
+                test_hash_equality!(967, 967, $size, $type, $preproc_dct);
                 // odd size, rectangular
-                test_hash_equality!(967, 1023, $size, $type);
+                test_hash_equality!(967, 1023, $size, $type, $preproc_dct);
             }
         };
-        ($width:expr, $height:expr, $size:expr, $type:ident) => {{
+        ($width:expr, $height:expr, $size:expr, $type:ident, $preproc_dct:expr) => {{
             let test_img = gen_test_img($width, $height);
-            let hash1 = ImageHash::hash(&test_img, $size, HashType::$type);
-            let hash2 = ImageHash::hash(&test_img, $size, HashType::$type);
+            let mut cfg = HasherConfig::new()
+                .hash_alg(HashAlg::$type)
+                .hash_size($size, $size);
+            if $preproc_dct {
+                if HashAlg::$type != HashAlg::Blockhash {
+                    cfg = cfg.preproc_dct();
+                } else {
+                    cfg = cfg.preproc_diff_gauss();
+                }
+            }
+            let hasher = cfg.to_hasher();
+            let hash1 = hasher.hash_image(&test_img);
+            let hash2 = hasher.hash_image(&test_img);
             assert_eq!(hash1, hash2);
         }};
     }
@@ -545,194 +611,49 @@ mod test {
     macro_rules! test_hash_type {
         ($type:ident, $modname:ident) => {
             mod $modname {
-                use {HashType, ImageHash};
                 use super::*;
 
-                test_hash_equality!(hash_eq_8, 8, $type);
-                test_hash_equality!(hash_eq_16, 16, $type);
-                test_hash_equality!(hash_eq_32, 32, $type);
+                test_hash_equality!(hash_eq_8, 8, $type, false);
+                test_hash_equality!(hash_eq_16, 16, $type, false);
+                test_hash_equality!(hash_eq_32, 32, $type, false);
+
+                test_hash_equality!(hash_eq_8_dct, 8, $type, true);
+                test_hash_equality!(hash_eq_16_dct, 16, $type, true);
+                test_hash_equality!(hash_eq_32_dct, 32, $type, true);
             }
-        }
+        };
     }
 
     test_hash_type!(Mean, mean);
-    test_hash_type!(Block, blockhash);
+    test_hash_type!(Median, median);
+    test_hash_type!(Blockhash, blockhash);
     test_hash_type!(Gradient, gradient);
     test_hash_type!(DoubleGradient, dbl_gradient);
-    test_hash_type!(DCT, dct);
-
-    #[test]
-    fn dct_2d_equality() {
-        fn dummy_dct(_ : &[f64], _: usize) -> Vec<f64> {
-            unimplemented!();
-        }
-
-        let dct1 = DCT2DFunc(dummy_dct);
-        let dct2 = DCT2DFunc(dummy_dct);
-
-        assert_eq!(dct1, dct2);
-    }
-
-    #[test]
-    fn dct_2d_inequality() {
-        fn dummy_dct(_ : &[f64], _: usize) -> Vec<f64> {
-            unimplemented!();
-        }
-
-        fn dummy_dct_2(_ : &[f64], _: usize) -> Vec<f64> {
-            unimplemented!();
-        }
-
-        let dct1 = DCT2DFunc(dummy_dct);
-        let dct2 = DCT2DFunc(dummy_dct_2);
-
-        assert_ne!(dct1, dct2);
-    }
+    test_hash_type!(VertGradient, vert_gradient);
 
     #[test]
     fn size() {
         let test_img = gen_test_img(1024, 1024);
-        let hash = ImageHash::hash(&test_img, 32, HashType::Mean);
-        assert_eq!(32*32, hash.size());
+        let hasher = HasherConfig::new()
+            .hash_alg(HashAlg::Mean)
+            .hash_size(32, 32)
+            .to_hasher();
+        let hash = hasher.hash_image(&test_img);
+        assert_eq!(32 * 32 / 8, hash.as_bytes().len());
     }
 
     #[test]
     fn base64_encoding_decoding() {
         let test_img = gen_test_img(1024, 1024);
-        let hash1 = ImageHash::hash(&test_img, 32, HashType::Mean);
+        let hasher = HasherConfig::new()
+            .hash_alg(HashAlg::Mean)
+            .hash_size(32, 32)
+            .to_hasher();
+        let hash1 = hasher.hash_image(&test_img);
 
         let base64_string = hash1.to_base64();
         let decoded_result = ImageHash::from_base64(&*base64_string);
 
         assert_eq!(decoded_result.unwrap(), hash1);
-    }  
-
-    #[test]
-    fn base64_error_on_empty() {
-        let decoded_result = ImageHash::from_base64("");
-        match decoded_result {
-            Err(InvalidBase64Length) => (),
-            _ => panic!("Expected a invalid length error")
-        };
-    }
-
-    #[cfg(feature = "bench")]
-    mod bench {
-        use super::gen_test_img;
-        use super::rand::{thread_rng, Rng};
-
-        extern crate test;
-
-        use ::{HashType, ImageHash};
-        
-        use self::test::Bencher;
-
-        const BENCH_HASH_SIZE: u32 = 8;
-        const TEST_IMAGE_SIZE: u32 = 64;
-
-        fn bench_hash(b: &mut Bencher, hash_type: HashType) {
-            let test_img = gen_test_img(TEST_IMAGE_SIZE, TEST_IMAGE_SIZE);
-        
-            b.iter(|| ImageHash::hash(&test_img, BENCH_HASH_SIZE, hash_type));
-        }
-
-        macro_rules! bench_hash {
-            ($bench_fn:ident : $hash_type:expr) => (
-                #[bench]
-                fn $bench_fn(b: &mut Bencher) {
-                    bench_hash(b, $hash_type);
-                }
-            )
-        }
-
-        bench_hash! { bench_mean_hash : HashType::Mean }
-        bench_hash! { bench_gradient_hash : HashType::Gradient }
-        bench_hash! { bench_dbl_gradient_hash : HashType::DoubleGradient }
-        bench_hash! { bench_block_hash: HashType::Block }
-
-
-        #[bench]
-        fn bench_dct_hash(b: &mut Bencher) {
-            ::dct::clear_precomputed_matrix();
-            bench_hash(b, HashType::DCT);
-        }
-
-        #[bench]
-        fn bench_dct_hash_precomp(b: &mut Bencher) {
-            ::precompute_dct_matrix(BENCH_HASH_SIZE);
-            bench_hash(b, HashType::DCT);
-        }
-
-        #[bench]
-        fn bench_dct_1d(b: &mut Bencher) {
-            const ROW_LEN: usize = 8;
-            let mut test_vals = [0f64; ROW_LEN];
-
-            fill_rand(&mut test_vals);
-
-            let mut output = [0f64;  ROW_LEN];
-
-            ::dct::clear_precomputed_matrix();
-
-            // Explicit slicing is necessary
-            b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
-        
-            test::black_box(&output);
-        }
-
-        #[bench]
-        fn bench_dct_1d_precomp(b: &mut Bencher) {
-            const ROW_LEN: usize = 8;
-            let mut test_vals = [0f64; ROW_LEN];
-
-            fill_rand(&mut test_vals);
-
-            let mut output = [0f64;  ROW_LEN];
-
-            ::dct::precomp_exact(ROW_LEN as u32);
-
-            // Explicit slicing is necessary
-            b.iter(|| ::dct::dct_1d(&test_vals[..], &mut output[..], ROW_LEN));
-
-            test::black_box(&output);
-        }
-
-        #[bench]
-        fn bench_dct_2d(b: &mut Bencher) {
-            const ROWSTRIDE: usize = 8;
-            const LEN: usize = ROWSTRIDE * ROWSTRIDE;
-
-            let mut test_vals = [0f64; LEN];
-
-            fill_rand(&mut test_vals);
-
-            ::dct::clear_precomputed_matrix();
-
-            b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
-        }
-
-        #[bench]
-        fn bench_dct_2d_precomp(b: &mut Bencher) {
-            const ROWSTRIDE: usize = 8;
-            const LEN: usize = ROWSTRIDE * ROWSTRIDE;
-
-            let mut test_vals = [0f64; LEN];
-
-            fill_rand(&mut test_vals);
-
-            ::dct::precomp_exact(ROWSTRIDE as u32);
-
-            b.iter(|| ::dct::dct_2d(&test_vals[..], ROWSTRIDE));
-        }
-
-        #[inline(never)]
-        fn fill_rand(out: &mut [f64]) {
-            let mut rng = thread_rng();
-
-            for (val, out) in rng.gen_iter().zip(out) {
-                *out = val;
-            }
-        }
     }
 }
-*/

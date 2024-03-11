@@ -1,0 +1,63 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  full_ci:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        toolchain: [ nightly, stable, 1.67.1 ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup rust version
+        run: rustup default ${{ matrix.toolchain }}
+
+      - name: Clippy fmt
+        run: |
+          cargo fmt -- --check
+        if: ${{ matrix.toolchain == 'stable' }}
+
+      - name: Cargo check
+        run: |
+          cargo check
+
+      - name: Cargo check all features
+        run: |
+          cargo check --all-features
+        if: ${{ matrix.toolchain == 'nightly' }}
+
+      - name: Cargo check examples
+        run: |
+          cargo check --examples
+
+      - name: Cargo check examples all features
+        run: |
+          cargo check --examples --all-features
+        if: ${{ matrix.toolchain == 'nightly' }}
+
+      - name: Clippy
+        run: |
+          cargo clippy
+        if: ${{ matrix.toolchain == 'stable' }}
+
+      - name: Test
+        run: |
+          cargo test --no-fail-fast -- --nocapture
+        if: ${{ matrix.toolchain != '1.67.1' }}  # dev dependencies require at least 1.74.0
+
+      - name: Test all features nightly
+        run:
+          cargo test --all-features --no-fail-fast -- --nocapture
+        if: ${{ matrix.toolchain == 'nightly' }}
+
+      - name: Doc
+        run: |
+          cargo doc
