@@ -33,6 +33,7 @@ fn bench_functions(c: &mut Criterion) {
 
     for alg in [
         HashAlg::Mean,
+        HashAlg::Median,
         HashAlg::Gradient,
         HashAlg::DoubleGradient,
         HashAlg::VertGradient,

@@ -604,6 +604,7 @@ mod test {
     }
 
     test_hash_type!(Mean, mean);
+    test_hash_type!(Median, median);
     test_hash_type!(Blockhash, blockhash);
     test_hash_type!(Gradient, gradient);
     test_hash_type!(DoubleGradient, dbl_gradient);
